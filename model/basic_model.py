@@ -1,4 +1,5 @@
 from model.agents_class import Stake
+import copy
 
 def update_timestep(params, step, h, s, _input):
     timestep = s['timestep']
@@ -67,6 +68,45 @@ def update_total_fdv(params, step, h, s, _input):
     return ("total_fdv", _input["total_fdv"]) 
 
 
+def calc_agents_balances(params, step, h, s):
+    ETH_security_share = params["ETH_upper_security_pct"]
+    AVL_security_share = params["AVL_upper_security_pct"]
+    #print("ETH_security_share", ETH_security_share)
+    init_agent_eth_alloc = params["ETH_agent_allocation"] ## [1.0,0.0]
+    init_agent_avl_alloc = params["AVL_agent_allocation"] ## [0.0,1.0]
+
+    total_security = s["total_security"]
+    avl_price = s["avl_price"]
+    eth_price = s["eth_price"]
+    t = s["timestep"]
+
+    avl_stake = copy.deepcopy(s["AVL_stake"])
+    eth_stake = copy.deepcopy(s["ETH_stake"])
+
+    #print("run", s['run'])
+
+    agents_composition = [ETH_security_share, AVL_security_share]
+
+    AVL_security_pct = [ i*j for i,j in zip(init_agent_avl_alloc, agents_composition)]
+    ETH_security_pct = [ i*j for i,j in zip(init_agent_eth_alloc, agents_composition)]
+
+    if t == 0:
+        agents_avl_balance = [total_security * pct / avl_price for pct in AVL_security_pct]
+        agents_eth_balance = [total_security * pct / eth_price for pct in ETH_security_pct]
+    else:
+        agents_avl_balance = avl_stake.agents_balances
+        agents_eth_balance = eth_stake.agents_balances
+
+    avl_stake.update_balances(agents_avl_balance)
+    eth_stake.update_balances(agents_eth_balance)
+
+    return ({
+        "AVL_stake": avl_stake,
+        "ETH_stake": eth_stake,
+    })
+
+    
+
 def calc_security_shares(params, step, h, s):
     #print("calc security shares")
     avl_price = s["avl_price"]
@@ -75,19 +115,19 @@ def calc_security_shares(params, step, h, s):
     total_security = s["total_security"]
 
 
-    agents_avl_balance = params["agents_avl_balance"]
-    agents_eth_balance = params["agents_eth_balance"]
+    agents_avl_balance = s["AVL_stake"].agents_balances
+    agents_eth_balance = s["ETH_stake"].agents_balances
     ETH_reward_pct = params["ETH_reward_pct"]
     AVL_reward_pct = params["AVL_reward_pct"]
 
 
     AVL_stake = Stake(avl_price, agents_avl_balance)
     AVL_stake.set_upper_bound()
-    print(AVL_stake.upper_bound)
+    #print(AVL_stake.upper_bound)
 
     ETH_stake = Stake(eth_price, agents_eth_balance)
     ETH_stake.set_upper_bound()
-    print(ETH_stake.upper_bound)
+    #print(ETH_stake.upper_bound)
 
     total_security = AVL_stake.upper_bound + ETH_stake.upper_bound
 

@@ -30,7 +30,6 @@ def calc_yields(params, step, h, s):
     AVL_stake = s["AVL_stake"]
     ETH_stake = s["ETH_stake"]
 
-    yield_pcts = s['yield_pcts']
 
     @dataclass
     class agent:
@@ -39,6 +38,8 @@ def calc_yields(params, step, h, s):
         total_yield_pct: float
 
     agent_cnt = len(AVL_stake.agents_balances)
+
+    yield_pcts = [0]*agent_cnt
     
     for i in range(agent_cnt):
         total_balance = AVL_stake.agents_scaled_balances[i] + ETH_stake.agents_scaled_balances[i]

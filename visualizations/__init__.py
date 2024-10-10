@@ -211,7 +211,7 @@ def plot_yield_pct(df, init_agent_eth_alloc):
             go.Scatter(
                 x=df["timestep"],
                 y=df["yield_pcts"].apply(lambda x: x[i]),  
-                name=f"Yield % Curve {i+1} (Alloc: {eth_alloc_label})", 
+                name=f"Yield % Curve {i+1} (Eth Alloc: {eth_alloc_label})", 
                 line=dict(width=2, dash='dot') 
             )
         )
