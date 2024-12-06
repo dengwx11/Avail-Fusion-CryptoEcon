@@ -44,7 +44,7 @@ def calc_rewards(params, step, h, s):
 
     inflation_rate = params["inflation_rate"]
 
-    rewards_allocation = params['rewards_allocation']
+    rewards_allocation = s['rewards_allocation']
     
     total_fdv = avl_price * 10000000000
     total_annual_rewards = total_fdv * inflation_rate / 100
@@ -152,3 +152,12 @@ def update_ETH_stake(params, step, h, s, _input):
 
 def update_AVL_stake(params, step, h, s, _input):
     return ("AVL_stake", _input["AVL_stake"])  
+
+def policy_tune_rewards_allocation(params, step, h, s):
+    rewards_allocation = s["rewards_allocation"]
+    return ({
+        "rewards_allocation": rewards_allocation
+        })
+
+def update_rewards_allocation(params, step, h, s, _input):
+    return ("rewards_allocation", _input["rewards_allocation"])
