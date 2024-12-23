@@ -244,3 +244,78 @@ def plot_yield_pct(df, init_agent_eth_alloc):
     )
 
     return fig
+
+
+def plot_staking_ratio_inflation_rate(df):
+    fig = go.Figure()
+
+    # Staking Ratio
+    fig.add_trace(
+        go.Scatter(
+            x=df["timestep"],
+            y=df["staking_ratio"] * 100,
+            name="Staking Ratio (%)",
+            line=dict(color='#1f77b4', dash='dot'),  # Blue color
+            yaxis='y1'
+        )
+    )
+
+    # Inflation Rate
+    fig.add_trace(
+        go.Scatter(
+            x=df["timestep"],
+            y=df["inflation_rate"] * 100,
+            name="Inflation Rate (%)",
+            line=dict(color='#ff7f0e', dash='dot'),  # Orange color
+            yaxis='y2'
+        )
+    )
+
+    fig.update_layout(
+        title={
+            'text': "Staking Ratio and Inflation Rate",
+            'y':0.9,
+            'x':0.5,
+            'xanchor': 'center',
+            'yanchor': 'top'
+        },
+        xaxis_title="Timestep",
+        yaxis=dict(
+            title="Staking Ratio (%)",
+            titlefont=dict(
+                color="#1f77b4"
+            ),
+            tickfont=dict(
+                color="#1f77b4"
+            )
+        ),
+        yaxis2=dict(
+            title="Inflation Rate (%)",
+            titlefont=dict(
+                color="#ff7f0e"
+            ),
+            tickfont=dict(
+                color="#ff7f0e"
+            ),
+            overlaying='y',
+            side='right'
+        ),
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=-0.5,
+            xanchor="center",
+            x=0.5
+        ),
+        hovermode="x unified",
+        template="plotly_white",
+        font=dict(
+            family="Arial",
+            size=18,
+            color="black"
+        ),
+        plot_bgcolor='rgba(255, 255, 255, 1)', 
+        paper_bgcolor='rgba(255, 255, 255, 1)'
+    )
+
+    return fig

@@ -38,16 +38,44 @@ def update_total_security(params, step, h, s, _input):
     total_security = _input["total_security"]
     return ("total_security", total_security)   
 
+def calc_inflation_rate(
+        staking_ratio,
+        inflation_decay = 0.05,
+        target_staking_rate = 0.5,
+        min_inflation_rate = 0.01,
+        max_inflation_rate = 0.05):
+    
+    d = inflation_decay
+    x_ideal = target_staking_rate
+    I_0 = min_inflation_rate
+    i_ideal = max_inflation_rate/x_ideal
+
+    I_left = I_0 + staking_ratio* (i_ideal - I_0/x_ideal)
+    I_right = I_0 +(i_ideal*x_ideal - I_0) * (2** ((x_ideal-staking_ratio)/d))
+    return min(I_left, I_right)
+
+
+
+
 def calc_rewards(params, step, h, s):
     #print('calc_rewards')
     avl_price = s["avl_price"]
+    staking_ratio = s['staking_ratio']
 
-    inflation_rate = params["inflation_rate"]
+
+    #inflation_rate = params["inflation_rate"]
+    inflation_decay = params["inflation_decay"]
+    target_staking_rate = params["target_staking_rate"]
+    min_inflation_rate = params["min_inflation_rate"]
+    max_inflation_rate = params["max_inflation_rate"]
+    inflation_rate = calc_inflation_rate(staking_ratio, inflation_decay, target_staking_rate, min_inflation_rate, max_inflation_rate)
+    #inflation_rate = calc_inflation_rate(staking_ratio)
+
 
     rewards_allocation = s['rewards_allocation']
     
     total_fdv = avl_price * 10000000000
-    total_annual_rewards = total_fdv * inflation_rate / 100
+    total_annual_rewards = total_fdv * inflation_rate
     total_annual_rewards_fusion = rewards_allocation * total_annual_rewards / 100
 
 
@@ -55,6 +83,7 @@ def calc_rewards(params, step, h, s):
         "total_annual_rewards": total_annual_rewards,
         "total_annual_rewards_fusion": total_annual_rewards_fusion,
         "total_fdv": total_fdv,
+        "inflation_rate": inflation_rate
     })
 
 
@@ -66,6 +95,9 @@ def update_total_annual_rewards_fusion(params, step, h, s, _input):
 
 def update_total_fdv(params, step, h, s, _input):
     return ("total_fdv", _input["total_fdv"]) 
+
+def update_inflation_rate(params, step, h, s, _input):
+    return ("inflation_rate", _input["inflation_rate"])
 
 
 def calc_agents_balances(params, step, h, s):
@@ -113,6 +145,7 @@ def calc_security_shares(params, step, h, s):
     eth_price = s["eth_price"]
     total_annual_rewards_fusion = s["total_annual_rewards_fusion"]
     total_security = s["total_security"]
+    total_fdv = s["total_fdv"]
 
 
     agents_avl_balance = s["AVL_stake"].agents_balances
@@ -144,14 +177,18 @@ def calc_security_shares(params, step, h, s):
         "ETH_security_pct": ETH_security_pct,
         "total_security": total_security,
         "AVL_stake": AVL_stake,
-        "ETH_stake": ETH_stake
+        "ETH_stake": ETH_stake,
+        "staking_ratio": total_security / total_fdv
     })
 
 def update_ETH_stake(params, step, h, s, _input):
     return ("ETH_stake", _input["ETH_stake"])
 
 def update_AVL_stake(params, step, h, s, _input):
-    return ("AVL_stake", _input["AVL_stake"])  
+    return ("AVL_stake", _input["AVL_stake"]) 
+
+def update_staking_ratio(params, step, h, s, _input):
+    return ("staking_ratio", _input["staking_ratio"])   
 
 def policy_tune_rewards_allocation(params, step, h, s):
     rewards_allocation = s["rewards_allocation"]
