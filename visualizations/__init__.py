@@ -31,37 +31,46 @@ def update_legend_names(fig, name_mapping=legend_state_variable_name_mapping):
 
 
 def plot_token_price_per_subset(df, scenario_names):
-    color_cycle = itertools.cycle(['#1f77b4', '#ff7f0e'])  # 示例颜色序列
     fig = make_subplots(rows=1, cols=2, subplot_titles=("AVL Prices", "ETH Prices"))
 
-    # AVL 价格绘制在第一列
+    # Extract prices from agents for each subset
     for subset in df.subset.unique():
-        color = next(color_cycle)
+        color = cadlabs_colorway_sequence[subset]  # Get unique color for each subset
+        subset_df = df[df.subset == subset]
+        
+        # Extract AVL prices from avl_maxi agent
+        avl_prices = [agents['avl_maxi'].assets['AVL'].price 
+                     for agents in subset_df['agents']]
+        
+        # Plot AVL prices
         fig.add_trace(
             go.Scatter(
-                x=df[df.subset == subset]["timestep"],
-                y=df[df.subset == subset]["avl_price"],
+                x=subset_df["timestep"],
+                y=avl_prices,
                 name=f"{scenario_names[subset]} AVL",
-                line=dict(color=color, dash='dot'),
+                line=dict(color=color, dash='solid'),  # Solid line for AVL
                 mode='lines'
             ),
             row=1, col=1
         )
         
-    # ETH 价格绘制在第二列
-    for subset in df.subset.unique():
-        color = next(color_cycle)
+        # Extract ETH prices from eth_maxi agent
+        eth_prices = [agents['eth_maxi'].assets['ETH'].price 
+                     for agents in subset_df['agents']]
+        
+        # Plot ETH prices
         fig.add_trace(
             go.Scatter(
-                x=df[df.subset == subset]["timestep"],
-                y=df[df.subset == subset]["eth_price"],
+                x=subset_df["timestep"],
+                y=eth_prices,
                 name=f"{scenario_names[subset]} ETH",
-                line=dict(color=color, dash='dot'),
+                line=dict(color=color, dash='dot'),  # Dotted line for ETH
                 mode='lines'
             ),
             row=1, col=2
         )
 
+    # Rest of the layout code remains the same
     fig.update_layout(
         title={
             'text': "Token Prices by Subset",
@@ -70,16 +79,16 @@ def plot_token_price_per_subset(df, scenario_names):
             'xanchor': 'center',
             'yanchor': 'top'},
         xaxis_title="Time",
-        xaxis2_title="Time",  # 确保第二个x轴也有标题
+        xaxis2_title="Time",
         yaxis_title="Price (USD)",
         legend=dict(
-            orientation="h",  # Horizontal orientation
+            orientation="h",
             yanchor="bottom",
-            y=-0.4,  # Position it a bit below the x-axis
+            y=-0.4,
             xanchor="center",
-            x=0.5,  # Center it
+            x=0.5,
             font=dict(
-                size=18,  # Adjust the size as needed
+                size=18,
                 color="black",
             ),
         ),
@@ -166,7 +175,6 @@ def plot_avg_overall_yield(df):
         )
     )
 
-
     fig.update_layout(
         title={
             'text': "Average Overall Yield %",
@@ -176,6 +184,9 @@ def plot_avg_overall_yield(df):
             'yanchor': 'top'},
         xaxis_title="Timestep",
         yaxis_title="Avg overall yield %",
+        yaxis=dict(
+            range=[0, 80],  # Set y-axis range from 0 to 100%
+        ),
         legend=dict(
             orientation="h",
             yanchor="bottom",
@@ -194,28 +205,33 @@ def plot_avg_overall_yield(df):
         paper_bgcolor='rgba(255, 255, 255, 1)'
     )
 
-    # Optionally save to HTML and JPEG
-    #fig.write_html('security_pct_plot.html')
-    #fig.write_image('security_pct_plot.jpeg', width=900, height=600)
-
     return fig
 
 
-def plot_yield_pct(df, init_agent_eth_alloc):
+def plot_yield_pct(df):
     fig = go.Figure()
 
+    # Get the first row's yield_pcts to determine dictionary keys
+    first_yield_dict = df["yield_pcts"].iloc[0]
+    agent_keys = list(first_yield_dict.keys())
 
-    num_curves = len(df["yield_pcts"].iloc[0])
+    # Plot yield curve for each agent
+    for i, agent_key in enumerate(agent_keys):
 
-
-    for i in range(num_curves):
-        eth_alloc_label = f"{init_agent_eth_alloc[i]*100:.2f}%" 
+        
+        # Extract yields for this agent across all timesteps
+        yields = [yield_dict[agent_key] for yield_dict in df["yield_pcts"]]
+        
         fig.add_trace(
             go.Scatter(
                 x=df["timestep"],
-                y=df["yield_pcts"].apply(lambda x: x[i]),  
-                name=f"Yield % Curve {i+1} (Eth Alloc: {eth_alloc_label})", 
-                line=dict(width=2, dash='dot') 
+                y=yields,
+                name=f"Yield % {agent_key} ", 
+                line=dict(
+                    width=2, 
+                    dash='dot',
+                    color=cadlabs_colorway_sequence[i]  # Use consistent colors
+                )
             )
         )
 
@@ -228,6 +244,9 @@ def plot_yield_pct(df, init_agent_eth_alloc):
             'yanchor': 'top'},
         xaxis_title="Timestep",
         yaxis_title="Yield %",
+        yaxis=dict(
+            range=[0, 30],  # Set y-axis range from 0 to 100%
+        ),
         legend=dict(
             orientation="h",
             yanchor="bottom",
@@ -247,7 +266,6 @@ def plot_yield_pct(df, init_agent_eth_alloc):
     )
 
     return fig
-
 
 def plot_staking_ratio_inflation_rate(df):
     fig = go.Figure()
@@ -265,8 +283,8 @@ def plot_staking_ratio_inflation_rate(df):
     fig.add_trace(
         go.Scatter(
             x=df["timestep"],
-            y=df["staking_ratio_avl"] * 100,
-            name="staking_ratio_avl",
+            y=df["staking_ratio_avl_fusion"] * 100,
+            name="staking_ratio_avl_fusion",
             line=dict(color=cadlabs_colorway_sequence[1], dash='dot'),
             yaxis='y1'
         )
@@ -274,8 +292,8 @@ def plot_staking_ratio_inflation_rate(df):
     fig.add_trace(
         go.Scatter(
             x=df["timestep"],
-            y=df["staking_ratio_eth"] * 100,
-            name="staking_ratio_eth",
+            y=df["staking_ratio_eth_fusion"] * 100,
+            name="staking_ratio_eth_fusion",
             line=dict(color=cadlabs_colorway_sequence[2], dash='dot'),
             yaxis='y1'
         )

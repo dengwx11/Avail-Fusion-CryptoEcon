@@ -66,12 +66,12 @@ class AgentStake:
         """Get combined TVL of all assets in USD"""
         return sum(asset.tvl for asset in self.assets.values())
 
-    @property
+
     def add_rewards(self, avl_amount: float):
         """Add AVL token rewards to the agent"""
         timesteps_per_year = 365 / DELTA_TIME
-        self.curr_annual_rewards_avl = avl_amount * timesteps_per_year
-        self.accu_rewards_avl += avl_amount
+        self.curr_annual_rewards_avl = avl_amount
+        self.accu_rewards_avl += avl_amount/timesteps_per_year
 
     @property
     def annual_rewards_usd(self) -> float:
@@ -178,4 +178,17 @@ class AgentStake:
     def total_combined_tvl(agents: Dict[str, 'AgentStake']) -> float:
         """Calculate combined TVL across all agents"""
         return sum(agent.total_tvl for agent in agents.values())
+
+    @staticmethod
+    def calculate_agent_tvl_shares(agents: Dict[str, 'AgentStake']) -> Dict[str, float]:
+        """Calculate each agent's TVL percentage of total combined TVL"""
+        total_tvl = AgentStake.total_combined_tvl(agents)
+        
+        if total_tvl <= 0:
+            return {name: 0.0 for name in agents.keys()}
+        
+        return {
+            name: agent.total_tvl / total_tvl
+            for name, agent in agents.items()
+        }
 
