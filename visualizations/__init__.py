@@ -13,6 +13,9 @@ legend_state_variable_name_mapping = {
     "AVL_security_pct": "AVL security %",
     "ETH_security_pct": "ETH security %",
     "total_security": "Total security",
+    "staking_ratio_all": "Staking ratio",
+    "staking_ratio_avl": "AVL staking ratio",
+    "staking_ratio_eth": "ETH staking ratio",
 }
 
 
@@ -249,31 +252,49 @@ def plot_yield_pct(df, init_agent_eth_alloc):
 def plot_staking_ratio_inflation_rate(df):
     fig = go.Figure()
 
-    # Staking Ratio
+    # Add three staking ratio traces with different colors
     fig.add_trace(
         go.Scatter(
             x=df["timestep"],
-            y=df["staking_ratio"] * 100,
-            name="Staking Ratio (%)",
-            line=dict(color='#1f77b4', dash='dot'),  # Blue color
+            y=df["staking_ratio_all"] * 100,
+            name="staking_ratio_all",
+            line=dict(color=cadlabs_colorway_sequence[0], dash='dot'),
+            yaxis='y1'
+        )
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=df["timestep"],
+            y=df["staking_ratio_avl"] * 100,
+            name="staking_ratio_avl",
+            line=dict(color=cadlabs_colorway_sequence[1], dash='dot'),
+            yaxis='y1'
+        )
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=df["timestep"],
+            y=df["staking_ratio_eth"] * 100,
+            name="staking_ratio_eth",
+            line=dict(color=cadlabs_colorway_sequence[2], dash='dot'),
             yaxis='y1'
         )
     )
 
-    # Inflation Rate
+    # Inflation Rate (secondary axis)
     fig.add_trace(
         go.Scatter(
             x=df["timestep"],
             y=df["inflation_rate"] * 100,
-            name="Inflation Rate (%)",
-            line=dict(color='#ff7f0e', dash='dot'),  # Orange color
+            name="inflation_rate",
+            line=dict(color=cadlabs_colorway_sequence[3], dash='dot'),
             yaxis='y2'
         )
     )
 
     fig.update_layout(
         title={
-            'text': "Staking Ratio and Inflation Rate",
+            'text': "Staking Ratios and Inflation Rate",
             'y':0.9,
             'x':0.5,
             'xanchor': 'center',
@@ -281,7 +302,7 @@ def plot_staking_ratio_inflation_rate(df):
         },
         xaxis_title="Timestep",
         yaxis=dict(
-            title="Staking Ratio (%)",
+            title="Staking Ratios (%)",
             titlefont=dict(
                 color="#1f77b4"
             ),
@@ -315,6 +336,53 @@ def plot_staking_ratio_inflation_rate(df):
             color="black"
         ),
         plot_bgcolor='rgba(255, 255, 255, 1)', 
+        paper_bgcolor='rgba(255, 255, 255, 1)'
+    )
+
+    # Apply legend name mapping
+    fig = update_legend_names(fig)
+    return fig
+
+
+def plot_total_security(df):
+    fig = go.Figure()
+
+    # Total Security
+    fig.add_trace(
+        go.Scatter(
+            x=df["timestep"],
+            y=df["total_security"],
+            name="Total Security",
+            line=dict(color='#2ca02c', dash='solid'),  # Green color
+            mode='lines'
+        )
+    )
+
+    fig.update_layout(
+        title={
+            'text': "Total Security Over Time",
+            'y':0.9,
+            'x':0.5,
+            'xanchor': 'center',
+            'yanchor': 'top'
+        },
+        xaxis_title="Timestep",
+        yaxis_title="Total Security (USD)",
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=-0.3,
+            xanchor="center",
+            x=0.5
+        ),
+        hovermode="x unified",
+        template="plotly_white",
+        font=dict(
+            family="Arial",
+            size=18,
+            color="black"
+        ),
+        plot_bgcolor='rgba(255, 255, 255, 1)',
         paper_bgcolor='rgba(255, 255, 255, 1)'
     )
 

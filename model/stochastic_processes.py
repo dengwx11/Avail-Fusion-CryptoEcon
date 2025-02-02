@@ -1,4 +1,4 @@
-from config import (
+from config.config import (
     TIMESTEPS,
     DELTA_TIME,
 )

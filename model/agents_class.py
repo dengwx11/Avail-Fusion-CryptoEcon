@@ -1,37 +1,181 @@
 from dataclasses import dataclass, field
+from typing import List, NamedTuple, Tuple, Dict
+
+from config.config import DELTA_TIME
+
+# Type alias for agent allocation percentages
+# with length of number of agents
+# for example, [0.25, 0.25, 0.5] means 25% of full pool is staked by agent 1, 25% by agent 2, and 50% by agent 3
+AgentComposition_TVL = List[float]
+
+
 
 @dataclass
-class Stake:
-    initial_price: float
-    agents_balances: list
-    upper_bound: int = field(default=0)
-    rewards: float = field(default=0.0)
-    agents_scaled_balances: list = field(init=False)
-    agents_rewards: list = field(init=False)
+class AssetAllocation:
+    """Stores allocation details for a single asset"""
+    pct: float  # Allocation percentage (0-1)
+    balance: float  # Token balance
+    price: float  # USD price per token
+
+    @property
+    def tvl(self) -> float:
+        """Calculate TVL in USD for this asset"""
+        return self.balance * self.price
+
+@dataclass
+class AgentStake:
+    """Manages asset allocations and auto-updates percentages on changes"""
+    assets: Dict[str, AssetAllocation]  # Asset symbol to allocation mapping
+    curr_annual_rewards_avl: float = 0.0  # Current annual rewards in AVL tokens
+    accu_rewards_avl: float = 0.0  # Accumulated rewards in AVL tokens
 
     def __post_init__(self):
-        self.agents_scaled_balances = [balance * self.initial_price for balance in self.agents_balances]
-        self.agents_rewards = [0 for _ in self.agents_balances] 
+        self._update_percentages()
+    
+    def _update_percentages(self):
+        """Recalculate allocation percentages based on current TVL"""
+        total_tvl = sum(asset.tvl for asset in self.assets.values())
+        
+        # Handle zero TVL edge case
+        if total_tvl <= 0:
+            for asset in self.assets.values():
+                asset.pct = 0.0
+            return
+
+        # Update percentages based on TVL ratios
+        for asset in self.assets.values():
+            asset.pct = asset.tvl / total_tvl
+
+    def update_asset(self, symbol: str, balance: float = None, price: float = None):
+        """Update either balance or price of an asset and recalculate percentages"""
+        asset = self.assets.get(symbol)
+        if not asset:
+            raise ValueError(f"Asset {symbol} not found in allocations")
+
+        if balance is not None:
+            asset.balance = balance
+        if price is not None:
+            asset.price = price
+            
+        self._update_percentages()
 
 
-    def update_rewards(self, reward_values):
-        if len(reward_values) != len(self.agents_balances):
-            raise ValueError("Wrong Match!")
-        self.agents_rewards = reward_values
+        
+    @property
+    def total_tvl(self) -> float:
+        """Get combined TVL of all assets in USD"""
+        return sum(asset.tvl for asset in self.assets.values())
 
-    def set_upper_bound(self):
-        self.upper_bound = sum(self.agents_scaled_balances)
+    @property
+    def add_rewards(self, avl_amount: float):
+        """Add AVL token rewards to the agent"""
+        timesteps_per_year = 365 / DELTA_TIME
+        self.curr_annual_rewards_avl = avl_amount * timesteps_per_year
+        self.accu_rewards_avl += avl_amount
 
-    def set_rewards(self, new_rewards):
-        self.rewards = new_rewards
+    @property
+    def annual_rewards_usd(self) -> float:
+        """Calculate USD value of current annual rewards"""
+        return self.curr_annual_rewards_avl * self.assets["AVL"].price
+    
+    @property
+    def current_yield(self) -> float:
+        """Calculate yield as rewards USD / agent's current TVL"""
+        return self.annual_rewards_usd / self.total_tvl if self.total_tvl > 0 else 0.0
 
-    def update_balances(self, new_balances):
-        if len(new_balances) != len(self.agents_balances):
-            raise ValueError("Wrong len match!")
-        self.agents_balances = new_balances
-        self.update_scaled_balances()
+    @classmethod
+    def create_maxi_agents(
+        cls,
+        target_composition: Dict[str, float],
+        total_tvl: float,
+        avl_price: float = 0.1,
+        eth_price: float = 3000,
+        btc_price: float = 30000
+    ) -> Dict[str, 'AgentStake']:
+        """Class method to create maxi agents based on target composition"""
+        # Calculate required balances
+        balances = cls.calculate_required_balances(
+            target_composition,
+            total_tvl,
+            avl_price,
+            eth_price,
+            btc_price
+        )
+        
+        return {
+            'avl_maxi': cls(assets={
+                'AVL': AssetAllocation(pct=1.0, balance=balances['AVL'], price=avl_price),
+                'ETH': AssetAllocation(pct=0.0, balance=0, price=eth_price),
+                'BTC': AssetAllocation(pct=0.0, balance=0, price=btc_price)
+            }),
+            'eth_maxi': cls(assets={
+                'AVL': AssetAllocation(pct=0.0, balance=0, price=avl_price),
+                'ETH': AssetAllocation(pct=1.0, balance=balances['ETH'], price=eth_price),
+                'BTC': AssetAllocation(pct=0.0, balance=0, price=btc_price)
+            }),
+            'btc_maxi': cls(assets={
+                'AVL': AssetAllocation(pct=0.0, balance=0, price=avl_price),
+                'ETH': AssetAllocation(pct=0.0, balance=0, price=eth_price),
+                'BTC': AssetAllocation(pct=1.0, balance=balances['BTC'], price=btc_price)
+            })
+        }
 
-    def update_scaled_balances(self):
-        self.agents_scaled_balances = [balance * self.initial_price for balance in self.agents_balances]
+    @staticmethod
+    def calculate_required_balances(
+        target_composition: Dict[str, float],
+        total_tvl: float,
+        avl_price: float = 0.1,
+        eth_price: float = 3000,
+        btc_price: float = 30000
+    ) -> Dict[str, float]:
+        """Static method to calculate required balances"""
+        sum_percent = sum(target_composition.values())
+        if not (0.99 <= sum_percent <= 1.01):
+            raise ValueError("Target composition must sum to 1 (±0.01 tolerance)")
 
+        avl_usd = total_tvl * target_composition.get('AVL', 0)
+        eth_usd = total_tvl * target_composition.get('ETH', 0)
+        btc_usd = total_tvl * target_composition.get('BTC', 0)
+
+        return {
+            'AVL': avl_usd / avl_price if avl_price > 0 else 0,
+            'ETH': eth_usd / eth_price if eth_price > 0 else 0,
+            'BTC': btc_usd / btc_price if btc_price > 0 else 0
+        }
+
+    @staticmethod
+    def update_agent_prices(
+        agents: Dict[str, 'AgentStake'],
+        avl_price: float = None,
+        eth_price: float = None,
+        btc_price: float = None
+    ) -> None:
+        """Update prices for all assets across all agents
+        
+        Args:
+            agents: Dictionary of AgentStake instances
+            *_price: New price values (None leaves unchanged)
+        """
+        # Update AVL price if provided
+        if avl_price is not None:
+            for agent in agents.values():
+                agent.assets['AVL'].price = avl_price
+                agent._update_percentages()
+        
+        # Update ETH price if provided
+        if eth_price is not None:
+            for agent in agents.values():
+                agent.assets['ETH'].price = eth_price
+                agent._update_percentages()
+        
+        # Update BTC price if provided
+        if btc_price is not None:
+            for agent in agents.values():
+                agent.assets['BTC'].price = btc_price
+                agent._update_percentages()
+
+    @staticmethod
+    def total_combined_tvl(agents: Dict[str, 'AgentStake']) -> float:
+        """Calculate combined TVL across all agents"""
+        return sum(agent.total_tvl for agent in agents.values())
 

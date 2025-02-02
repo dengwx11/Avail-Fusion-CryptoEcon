@@ -1,5 +1,9 @@
-from model.agents_class import Stake
+from model.agents_class import AgentStake
 import copy
+from model.rewards import calc_inflation_rate
+
+
+
 
 def update_timestep(params, step, h, s, _input):
     timestep = s['timestep']
@@ -10,7 +14,6 @@ def update_avl_price(params, step, h, s, _input):
     avl_price_process = params["avl_price_process"]
     
     avl_new_price = avl_price_process(s['run'],s["timestep"])
-
     
     return ("avl_price", avl_new_price)
 
@@ -38,21 +41,7 @@ def update_total_security(params, step, h, s, _input):
     total_security = _input["total_security"]
     return ("total_security", total_security)   
 
-def calc_inflation_rate(
-        staking_ratio,
-        inflation_decay = 0.05,
-        target_staking_rate = 0.5,
-        min_inflation_rate = 0.01,
-        max_inflation_rate = 0.05):
-    
-    d = inflation_decay
-    x_ideal = target_staking_rate
-    I_0 = min_inflation_rate
-    i_ideal = max_inflation_rate/x_ideal
 
-    I_left = I_0 + staking_ratio* (i_ideal - I_0/x_ideal)
-    I_right = I_0 +(i_ideal*x_ideal - I_0) * (2** ((x_ideal-staking_ratio)/d))
-    return min(I_left, I_right)
 
 
 
@@ -60,7 +49,7 @@ def calc_inflation_rate(
 def calc_rewards(params, step, h, s):
     #print('calc_rewards')
     avl_price = s["avl_price"]
-    staking_ratio = s['staking_ratio']
+    staking_ratio = s['staking_ratio_avl']
 
 
     #inflation_rate = params["inflation_rate"]
@@ -147,30 +136,32 @@ def calc_security_shares(params, step, h, s):
     total_security = s["total_security"]
     total_fdv = s["total_fdv"]
 
+    AVL_stake = s["AVL_stake"]
+    ETH_stake = s["ETH_stake"]
 
-    agents_avl_balance = s["AVL_stake"].agents_balances
-    agents_eth_balance = s["ETH_stake"].agents_balances
+
+    agents_avl_balance = AVL_stake.agents_balances
+    agents_eth_balance = ETH_stake.agents_balances
     ETH_reward_pct = params["ETH_reward_pct"]
     AVL_reward_pct = params["AVL_reward_pct"]
 
 
-    AVL_stake = Stake(avl_price, agents_avl_balance)
-    AVL_stake.set_upper_bound()
-    #print(AVL_stake.upper_bound)
-
-    ETH_stake = Stake(eth_price, agents_eth_balance)
-    ETH_stake.set_upper_bound()
-    #print(ETH_stake.upper_bound)
 
     total_security = AVL_stake.upper_bound + ETH_stake.upper_bound
 
-    AVL_security_pct = AVL_stake.upper_bound / total_security * 100
-    ETH_security_pct = ETH_stake.upper_bound / total_security * 100
+    if total_security != 0:
+        AVL_security_pct = AVL_stake.upper_bound / total_security * 100
+        ETH_security_pct = ETH_stake.upper_bound / total_security * 100
+    else:
+        AVL_security_pct = params["AVL_upper_security_pct"] * 100
+        ETH_security_pct = params["ETH_upper_security_pct"] * 100
 
     ETH_stake.set_rewards(ETH_reward_pct * total_annual_rewards_fusion / 100)
     AVL_stake.set_rewards(AVL_reward_pct * total_annual_rewards_fusion / 100)
     
-
+    print("ETH_security_pct", ETH_security_pct)
+    print("AVL_security_pct", AVL_security_pct)
+    print("total_security", total_security)
     
     return ({
         "AVL_security_pct": AVL_security_pct,
@@ -178,17 +169,29 @@ def calc_security_shares(params, step, h, s):
         "total_security": total_security,
         "AVL_stake": AVL_stake,
         "ETH_stake": ETH_stake,
-        "staking_ratio": total_security / total_fdv
+        "staking_ratio_all": total_security / total_fdv,
+        "staking_ratio_avl": AVL_stake.upper_bound / total_security,
+        "staking_ratio_eth": ETH_stake.upper_bound / total_security
     })
 
 def update_ETH_stake(params, step, h, s, _input):
-    return ("ETH_stake", _input["ETH_stake"])
+    ETH_stake = _input["ETH_stake"]
+    ETH_stake.update_price(s["eth_price"])
+    return ("ETH_stake", ETH_stake)
 
 def update_AVL_stake(params, step, h, s, _input):
-    return ("AVL_stake", _input["AVL_stake"]) 
+    AVL_stake = _input["AVL_stake"]
+    AVL_stake.update_price(s["avl_price"])
+    return ("AVL_stake", AVL_stake) 
 
-def update_staking_ratio(params, step, h, s, _input):
-    return ("staking_ratio", _input["staking_ratio"])   
+def update_staking_ratio_avl(params, step, h, s, _input):
+    return ("staking_ratio_avl", _input["staking_ratio_avl"])  
+
+def update_staking_ratio_eth(params, step, h, s, _input):
+    return ("staking_ratio_eth", _input["staking_ratio_eth"]) 
+
+def update_staking_ratio_all(params, step, h, s, _input):
+    return ("staking_ratio_all", _input["staking_ratio_all"]) 
 
 def policy_tune_rewards_allocation(params, step, h, s):
     rewards_allocation = s["rewards_allocation"]

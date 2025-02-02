@@ -43,3 +43,9 @@ def local_variables(_locals):
 
 def default(obj):
     return field(default_factory=lambda: copy.copy(obj))
+
+def generic_state_updater(field_name: str):
+    """Factory function to create state update functions"""
+    def update_state(params, step, h, s, _input):
+        return (field_name, _input.get(field_name, s.get(field_name)))
+    return update_state
