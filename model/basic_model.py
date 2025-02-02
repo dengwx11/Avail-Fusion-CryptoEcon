@@ -2,8 +2,9 @@ from model.agents_class import AgentStake
 import copy
 from model.rewards import calc_inflation_rate
 
-
-
+###########################
+# environment
+###########################
 
 def update_timestep(params, step, h, s, _input):
     timestep = s['timestep']
@@ -26,6 +27,24 @@ def update_eth_price(params, step, h, s, _input):
     return ("eth_price", eth_new_price)
 
 
+###########################
+# admin change encoded params for targeting yields
+###########################
+
+def policy_tune_rewards_allocation(params, step, h, s):
+    
+    avl_rewards_allocation = s["avl_rewards_allocation"]
+    fusion_rewards_allocation = s["fusion_rewards_allocation"]
+
+    return ({
+        "avl_rewards_allocation": avl_rewards_allocation,
+        "fusion_rewards_allocation": fusion_rewards_allocation
+        })
+
+
+###########################
+# environment
+###########################
 
 def update_AVL_pct(params, step, h, s, _input):
     AVL_security_pct = _input["AVL_security_pct"]
@@ -193,11 +212,5 @@ def update_staking_ratio_eth(params, step, h, s, _input):
 def update_staking_ratio_all(params, step, h, s, _input):
     return ("staking_ratio_all", _input["staking_ratio_all"]) 
 
-def policy_tune_rewards_allocation(params, step, h, s):
-    rewards_allocation = s["rewards_allocation"]
-    return ({
-        "rewards_allocation": rewards_allocation
-        })
 
-def update_rewards_allocation(params, step, h, s, _input):
-    return ("rewards_allocation", _input["rewards_allocation"])
+

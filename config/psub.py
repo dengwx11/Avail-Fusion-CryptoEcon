@@ -1,10 +1,11 @@
 import model.basic_model as basic_model
 import model.cold_start as cold_start
 import model.agents as agents
+import model.utils as utils
 
 psub = [
     {
-        "policies": {
+        "policies": { # basic environment
              },
         "variables": {
             "timestep": basic_model.update_timestep,
@@ -12,15 +13,16 @@ psub = [
             "eth_price": basic_model.update_eth_price,
         }
     }, {
-        "policies": {
+        "policies": { # tune rewards allocation by updating target yields by admin
             "action":basic_model.policy_tune_rewards_allocation
              },
         "variables": {
-            "rewards_allocation": basic_model.update_rewards_allocation,
+            "avl_rewards_allocation": utils.generic_state_updater("avl_rewards_allocation"), # beta
+            "fusion_rewards_allocation": utils.generic_state_updater("fusion_rewards_allocation"), # with upper bound
         }
     }, 
     {
-        "policies": {
+        "policies": { # cold start if timestep < COLD_START_DURATION_TIMESTEPS
             "action":cold_start.cold_start_staking_policy
              },
         "variables": {
