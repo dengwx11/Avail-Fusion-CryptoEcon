@@ -1,6 +1,7 @@
 # User-requested exclusions
 *.csv
 v*.ipynb
+test*.ipynb
 
 # Python general
 __pycache__/
