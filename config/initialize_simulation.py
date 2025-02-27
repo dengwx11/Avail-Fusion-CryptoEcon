@@ -1,5 +1,6 @@
 from typing import Dict, List
 from model.agents_class import AgentStake, AssetAllocation
+from model.pool_management import PoolManager
 
 def create_maxi_agents(
     eth_balance: float = 32,  # ~1 ETH at 3000 USD
@@ -79,4 +80,91 @@ def calculate_required_balances(
         'AVL': avl_usd / avl_price if avl_price > 0 else 0,
         'ETH': eth_usd / eth_price if eth_price > 0 else 0,
         'BTC': btc_usd / btc_price if btc_price > 0 else 0
+    }
+
+def initialize_state(init_total_fdv, constants, rewards_result, seed):
+    """Initialize simulation state with agents and pool manager"""
+    # ... [existing initialization code] ...
+    
+    # Create initial agents
+    agents = AgentStake.create_maxi_agents(
+        target_composition={
+            'AVL': 0.7,
+            'ETH': 0.3,
+            'BTC': 0.0  # No BTC initially
+        },
+        total_tvl=1.0
+    )
+    
+    # Initialize pool manager
+    pool_manager = PoolManager(
+        total_budget=30e6
+    )
+    
+    # Set initial pool configurations
+    pool_manager.pools = {
+        'AVL': {
+                'base_deposit': 5e4,
+                'max_extra_deposit': 1e5,
+                'deposit_k': 5.0, # sensitivity of deposit flow to APY
+                'apy_threshold': 0.10,  # 10%
+                'base_withdrawal': 5e3,
+                'max_extra_withdrawal': 1e5,
+                'withdrawal_k': 7.0, # sensitivity of withdrawal flow to APY
+                'max_cap': float('inf')
+        },
+        'ETH': {
+                'base_deposit': 5e4,
+                'max_extra_deposit': 5e5,
+                'deposit_k': 8.0,
+                'apy_threshold': 0.03,  # 3%
+                'base_withdrawal': 5e3,
+                'max_extra_withdrawal': 1.5e5,
+                'withdrawal_k': 10.0,
+                'max_cap': float('inf')
+        }
+    }
+    
+    # Allocate initial budget
+    initial_allocations = {
+        'AVL': 0.7,
+        'ETH': 0.3,
+        'BTC': 0.0  # No allocation initially
+    }
+    pool_manager.allocate_budget(initial_allocations)
+    
+    # Return the initial state
+    return {
+        'timestep': 0,
+        'agents': agents,
+        
+        # admin params
+        'pool_manager': pool_manager,
+        "target_yields": {'AVL': 0.15, 'ETH': 0.035},
+
+        # security shares
+        'total_security': 0,
+        'total_fdv': init_total_fdv,
+
+        # staking ratios
+        "staking_ratio_all": constants["native_staking_ratio"],
+        "staking_ratio_fusion": {
+            'AVL': 0, 
+            'ETH': 0
+        },
+
+        # inflation and rewards metrics
+        "inflation_rate": rewards_result["init_inflation_rate"],
+        "total_annual_inflation_rewards_in_avl": rewards_result["total_inflation_rewards_in_avl"],
+        "total_annual_inflation_rewards_usd": rewards_result["total_inflation_rewards_usd"],
+
+        # yield metrics
+        'yield_pcts': {
+            'avl_maxi': 0,
+            'eth_maxi': 0,
+            'btc_maxi': 0
+        },      
+        "avg_yield": 0,
+        
+        
     }

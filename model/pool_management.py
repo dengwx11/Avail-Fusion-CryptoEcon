@@ -1,0 +1,208 @@
+import numpy as np
+from dataclasses import dataclass, field
+from typing import Dict, List, Optional, Set
+
+
+@dataclass
+class PoolManager:
+    """
+    Manages staking pools with shared security budget allocation
+    and controls deposit/withdrawal flows using sigmoid functions.
+    """
+    # Total shared security budget (in AVL tokens)
+    total_budget: float
+    
+    # Pool configuration
+    pools: Dict[str, Dict] = field(default_factory=dict)
+    
+    # Internal state
+    _allocated_budgets: Dict[str, float] = field(default_factory=dict)
+    _paused_deposits: Set[str] = field(default_factory=set)
+    _deleted_pools: Set[str] = field(default_factory=set)
+    _cap_paused_deposits: Set[str] = field(default_factory=set)
+    
+    def __post_init__(self):
+        """Initialize default pool parameters if not provided"""
+        # Default parameters for each pool type
+        default_params = {
+            'AVL': {
+                'base_deposit': 5e4,
+                'max_extra_deposit': 1e5,
+                'deposit_k': 5.0, # sensitivity of deposit flow to APY
+                'apy_threshold': 0.10,  # 10%
+                'base_withdrawal': 5e3,
+                'max_extra_withdrawal': 1e5,
+                'withdrawal_k': 7.0, # sensitivity of withdrawal flow to APY
+                'max_cap': float('inf')
+            },
+            'ETH': {
+                'base_deposit': 5e4,
+                'max_extra_deposit': 5e5,
+                'deposit_k': 8.0,
+                'apy_threshold': 0.03,  # 3%
+                'base_withdrawal': 5e3,
+                'max_extra_withdrawal': 1.5e5,
+                'withdrawal_k': 10.0,
+                'max_cap': float('inf')
+            },
+            'BTC': {
+                'base_deposit': 1e5,
+                'max_extra_deposit': 4e5,
+                'deposit_k': 6.0,
+                'apy_threshold': 0.02,  # 2%
+                'base_withdrawal': 8e3,
+                'max_extra_withdrawal': 2e5,
+                'withdrawal_k': 9.0,
+                'max_cap': float('inf')
+            }
+        }
+        
+        # Initialize pools with default parameters if not provided
+        for pool_type, default_config in default_params.items():
+            if pool_type not in self.pools:
+                self.pools[pool_type] = default_config
+            else:
+                # Apply defaults for missing parameters
+                for param, value in default_config.items():
+                    if param not in self.pools[pool_type]:
+                        self.pools[pool_type][param] = value
+            
+            # Initialize allocated budget to zero
+            self._allocated_budgets[pool_type] = 0.0
+    
+    def allocate_budget(self, allocations: Dict[str, float]):
+        """
+        Allocate budget to pools based on specified percentages.
+        
+        Args:
+            allocations: Dict mapping pool types to allocation percentages (0-1)
+        """
+        # Validate allocations sum to approximately 1
+        allocation_sum = sum(allocations.values())
+        if not (0.99 <= allocation_sum <= 1.01):
+            raise ValueError(f"Allocations must sum to 1.0 (got {allocation_sum})")
+        
+        # Update allocated budgets
+        for pool_type, allocation_pct in allocations.items():
+            if pool_type in self._deleted_pools:
+                continue  # Skip deleted pools
+                
+            self._allocated_budgets[pool_type] = self.total_budget * allocation_pct
+    
+    def pause_deposits(self, pool_type: str, due_to_cap=False):
+        """
+        Pause deposits for a specific pool
+        
+        Args:
+            pool_type: Type of pool to pause
+            due_to_cap: Whether pause is due to hitting max cap
+        """
+        self._paused_deposits.add(pool_type)
+        if due_to_cap:
+            self._cap_paused_deposits.add(pool_type)
+    
+    def resume_deposits(self, pool_type: str):
+        """Resume deposits for a specific pool"""
+        if pool_type in self._paused_deposits:
+            self._paused_deposits.remove(pool_type)
+        if pool_type in self._cap_paused_deposits:
+            self._cap_paused_deposits.remove(pool_type)
+    
+    def delete_pool(self, pool_type: str):
+        """Delete a pool (stop rewards and new deposits)"""
+        self._deleted_pools.add(pool_type)
+        self._paused_deposits.add(pool_type)
+        self._allocated_budgets[pool_type] = 0.0
+    
+    def calculate_flows(self, pool_type: str, current_apy: float, current_tvl: float) -> Dict[str, float]:
+        """
+        Calculate deposit and withdrawal flows using sigmoid functions.
+        
+        Args:
+            pool_type: Type of pool (AVL, ETH, BTC)
+            current_apy: Current APY for this pool
+            
+        Returns:
+            Dict with 'deposit' and 'withdrawal' amounts in USD
+        """
+        if pool_type in self._deleted_pools:
+            return {'deposit': 0.0, 'withdrawal': current_tvl}
+            
+        pool_config = self.pools.get(pool_type, {})
+        
+        # Calculate deposit flow (sigmoid function)
+        deposit_k = pool_config.get('deposit_k', 5.0)
+        base_deposit = pool_config.get('base_deposit', 0.0)
+        max_extra_deposit = pool_config.get('max_extra_deposit', 1e6)
+        apy_threshold = pool_config.get('apy_threshold', 0.05)
+        
+        # Sigmoid function for deposits
+        sigmoid_factor = 1.0 / (1.0 + np.exp(-deposit_k * (current_apy - apy_threshold)))
+        deposit_flow = base_deposit + max_extra_deposit * sigmoid_factor
+        
+        # If deposits are paused, set to zero
+        if pool_type in self._paused_deposits:
+            deposit_flow = 0.0
+            
+        # Calculate withdrawal flow (inverse sigmoid)
+        withdrawal_k = pool_config.get('withdrawal_k', 7.0)
+        base_withdrawal = pool_config.get('base_withdrawal', 0.0)
+        max_extra_withdrawal = pool_config.get('max_extra_withdrawal', 5e5)
+        
+        # Sigmoid function for withdrawals (inverse relation to APY)
+        sigmoid_factor = 1.0 / (1.0 + np.exp(-withdrawal_k * (apy_threshold - current_apy)))
+        withdrawal_flow = base_withdrawal + max_extra_withdrawal * sigmoid_factor
+        
+        return {
+            'deposit': deposit_flow,
+            'withdrawal': withdrawal_flow
+        }
+    
+    def check_cap_status(self, pool_type: str, current_tvl: float) -> bool:
+        """Check if pool has reached maximum cap and manage deposits accordingly"""
+        max_cap = self.pools.get(pool_type, {}).get('max_cap', float('inf'))
+        
+        # If TVL is at or above cap, pause deposits
+        if current_tvl >= max_cap:
+            self.pause_deposits(pool_type, due_to_cap=True)
+            return True
+        
+        # If TVL is below cap and deposits were paused due to cap, resume them
+        elif pool_type in self._cap_paused_deposits and current_tvl < max_cap * 0.95:
+            # Only resume if this pool was paused due to cap
+            self.resume_deposits(pool_type)
+            return False
+        
+        return pool_type in self._paused_deposits
+    
+    def get_pool_rewards(self, pool_type: str, required_amount: float) -> float:
+        """
+        Get rewards allocation for a pool, limited by available budget.
+        
+        Args:
+            pool_type: Type of pool (AVL, ETH, BTC)
+            required_amount: Required reward amount
+            
+        Returns:
+            Actual reward amount (may be capped by budget)
+        """
+        if pool_type in self._deleted_pools:
+            return 0.0
+            
+        available_budget = self._allocated_budgets.get(pool_type, 0.0)
+        
+        # Cap rewards at available budget
+        actual_rewards = min(required_amount, available_budget)
+        
+        # Update remaining budget
+        self._allocated_budgets[pool_type] -= actual_rewards
+        
+        return actual_rewards
+    
+    def get_remaining_budget(self) -> Dict[str, float]:
+        """Get remaining budget for each pool"""
+        return self._allocated_budgets.copy()
+    
+    def get_active_pools(self) -> List[str]:
+        """Get list of active (non-deleted) pools"""
+        return [pool for pool in self.pools.keys() if pool not in self._deleted_pools] 

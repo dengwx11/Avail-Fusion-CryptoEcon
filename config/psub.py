@@ -2,6 +2,7 @@ import model.basic_model as basic_model
 import model.cold_start as cold_start
 import model.yield_apy as yield_apy
 import model.utils as utils
+import model.btc_activation as btc_activation
 
 psub = [
     {
@@ -11,15 +12,6 @@ psub = [
         "variables": {
             "timestep": basic_model.update_timestep,
             "agents": utils.generic_state_updater("agents"),
-        }
-    }, {
-        "policies": { # tune rewards allocation by updating target yields by admin
-            # TODO: add admin actions, need to get verified by Gali
-            "action":basic_model.policy_tune_rewards_allocation
-             },
-        "variables": {
-            "avl_rewards_allocation": utils.generic_state_updater("avl_rewards_allocation"), # beta
-            "fusion_rewards_allocation": utils.generic_state_updater("fusion_rewards_allocation"), # with upper bound
         }
     }, 
     {
@@ -37,10 +29,8 @@ psub = [
             },
             "variables": {
                 "total_security": utils.generic_state_updater("total_security"),
-                "agents": utils.generic_state_updater("agents"),
                 "staking_ratio_all": utils.generic_state_updater("staking_ratio_all"),  
-                "staking_ratio_avl_fusion": utils.generic_state_updater("staking_ratio_avl_fusion"),
-                "staking_ratio_eth_fusion": utils.generic_state_updater("staking_ratio_eth_fusion"),
+                "staking_ratio_fusion": utils.generic_state_updater("staking_ratio_fusion"),
             }
     }, 
     # {
@@ -68,9 +58,26 @@ psub = [
         "variables": {
             "total_annual_inflation_rewards_in_avl": utils.generic_state_updater("total_annual_inflation_rewards_in_avl"),
             "total_annual_inflation_rewards_usd": utils.generic_state_updater("total_annual_inflation_rewards_usd"),
-            "total_annual_rewards_fusion_usd": utils.generic_state_updater("total_annual_rewards_fusion_usd"),
             "total_fdv": utils.generic_state_updater("total_fdv"),
             "inflation_rate": utils.generic_state_updater("inflation_rate"),
+        }
+    },
+    {
+        "policies": {
+            "action": btc_activation.policy_activate_btc_pool
+        },
+        "variables": {
+            "pool_manager": utils.generic_state_updater("pool_manager"),
+        }
+    },
+    {
+        "policies": {
+            "action": basic_model.policy_tune_rewards_allocation
+        },
+        "variables": {
+            "target_yields": utils.generic_state_updater("target_yields"),
+            "pool_manager": utils.generic_state_updater("pool_manager"),
+            "agents": utils.generic_state_updater("agents"),
         }
     }
 ]

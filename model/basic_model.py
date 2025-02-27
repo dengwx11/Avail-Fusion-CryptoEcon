@@ -1,7 +1,8 @@
 from model.agents_class import AgentStake
 import copy
 from model.rewards import calc_inflation_rate
-
+from config.config import DELTA_TIME
+from model.pool_management import PoolManager
 ###########################
 # environment
 ###########################
@@ -13,15 +14,22 @@ def update_timestep(params, step, h, s, _input):
 
 def policy_update_token_prices(params, step, h, s):
     avl_price_process = params["avl_price_process"]
-    avl_new_price = avl_price_process(s["timestep"])
     eth_price_process = params["eth_price_process"]
-    eth_new_price = eth_price_process(s["timestep"])
-    
-    # Update all agents with new AVL price
+    btc_price_process = params["btc_price_process"]
+    lens_price_process = params["lens_price_process"]
     agents = s['agents'].copy()
-    AgentStake.update_agent_prices(agents, avl_price=avl_new_price, eth_price=eth_new_price)
-    print("[DEBUG] update_token_prices")
-    print(agents)
+    print("###########################")
+    print("timestep", s["timestep"])
+    if s["timestep"] % 7 == 0: # update eth price every 7 timesteps
+        for asset in ['AVL', 'ETH', 'BTC']:
+            # Get the new price for the current asset from its price process
+            new_price = locals()[f"{asset.lower()}_price_process"](s["timestep"])
+            # Update all agents with new AVL price
+            # Create kwargs dict to pass the updated price for the current asset
+            price_kwargs = {f"{asset.lower()}_price": new_price}
+            AgentStake.update_agent_prices(agents, **price_kwargs)
+        print("[DEBUG] update_token_prices")
+        print(agents)
     return ({"agents": agents})
 
 
@@ -30,15 +38,133 @@ def policy_update_token_prices(params, step, h, s):
 # admin change encoded params for targeting yields
 ###########################
 
-def policy_tune_rewards_allocation(params, step, h, s):
-    
-    avl_rewards_allocation = s["avl_rewards_allocation"]
-    fusion_rewards_allocation = s["fusion_rewards_allocation"]
 
-    return ({
-        "avl_rewards_allocation": avl_rewards_allocation,
-        "fusion_rewards_allocation": fusion_rewards_allocation
-        })
+def policy_tune_rewards_allocation(params, step, h, s):
+    """
+    Adjust rewards allocation using unified pool manager and target yields.
+    Allows admin to replenish the security budget periodically.
+    """
+    timestep = s["timestep"]
+    agents = s["agents"].copy()
+    pool_manager = s.get("pool_manager")
+    btc_activation = params.get('btc_activation_day', 180)
+    
+    # Get target yields from parameters or previous state
+    target_yields = params["target_yields"].get(
+        timestep,  # Check current timestep first
+        s.get("target_yields", {})  # Fallback to previous state
+    )
+    
+    # Initialize or update pool manager
+    if pool_manager is None:
+        # First run, initialize pool manager
+        initial_budget = 30e6  # Initial unified security budget
+        pool_manager = PoolManager(total_budget=initial_budget)
+    
+    # Check for budget replenishment schedule
+    budget_replenishment = params.get("security_budget_replenishment", {}).get(timestep, 0)
+    if budget_replenishment > 0:
+        # Admin is adding new tokens to the security budget
+        print(f"[DEBUG] Replenishing security budget with {budget_replenishment} tokens")
+        
+        # Get current budget and allocations before adding new funds
+        current_budget = pool_manager.total_budget
+        remaining_budget = pool_manager.get_remaining_budget()
+        
+        # Calculate the current allocation ratios from remaining budget
+        total_remaining = sum(remaining_budget.values())
+        
+        # Default allocations if all budget has been spent
+        if total_remaining <= 0:
+            if timestep < btc_activation:
+                allocations = {
+                    'AVL': params['security_pct_before_btc'].get('AVL', 0.7),
+                    'ETH': params['security_pct_before_btc'].get('ETH', 0.3),
+                    'BTC': 0.0
+                }
+            else:
+                allocations = {
+                    'AVL': params['security_pct_after_btc'].get('AVL', 0.5),
+                    'ETH': params['security_pct_after_btc'].get('ETH', 0.2),
+                    'BTC': params['security_pct_after_btc'].get('BTC', 0.3)
+                }
+        else:
+            # Use current allocation ratios
+            allocations = {
+                pool: budget / total_remaining
+                for pool, budget in remaining_budget.items()
+                if pool not in pool_manager._deleted_pools
+            }
+            
+            # Normalize allocations to sum to 1
+            allocation_sum = sum(allocations.values())
+            if allocation_sum > 0:
+                allocations = {k: v/allocation_sum for k, v in allocations.items()}
+        
+        # Update pool manager's total budget
+        pool_manager.total_budget += budget_replenishment
+        
+        # Allocate new budget according to the current ratios
+        new_budget_allocation = {k: v * budget_replenishment for k, v in allocations.items()}
+        
+        # Add new allocation to each pool's budget
+        for pool, amount in new_budget_allocation.items():
+            if pool not in pool_manager._deleted_pools:
+                pool_manager._allocated_budgets[pool] = pool_manager._allocated_budgets.get(pool, 0) + amount
+    
+    # Handle BTC activation (existing code)
+    if timestep == btc_activation:
+        # Adjust budget allocations for BTC activation
+        # Allocate budget based on target security percentages
+        if timestep < btc_activation:
+            allocations = {
+                'AVL': params['security_pct_before_btc'].get('AVL', 0.7),
+                'ETH': params['security_pct_before_btc'].get('ETH', 0.3),
+                'BTC': 0.0
+            }
+        else:
+            allocations = {
+                'AVL': params['security_pct_after_btc'].get('AVL', 0.5),
+                'ETH': params['security_pct_after_btc'].get('ETH', 0.2),
+                'BTC': params['security_pct_after_btc'].get('BTC', 0.3)
+            }
+        pool_manager.allocate_budget(allocations)
+    
+    # Calculate required rewards based on target yields
+    timesteps_per_year = 365 / DELTA_TIME
+    avl_price = agents['avl_maxi'].assets['AVL'].price
+    
+    required_rewards = {}
+    for asset, yield_pct in target_yields.items():
+        # Skip assets not yet activated (BTC before activation day)
+        if asset == 'BTC' and timestep < btc_activation:
+            continue
+            
+        agent = agents[f"{asset.lower()}_maxi"]
+        annual_rewards_usd = agent.total_tvl * yield_pct
+        annual_rewards_avl = annual_rewards_usd / avl_price
+        
+        # Store required rewards
+        required_rewards[asset] = annual_rewards_avl
+    
+    # Allocate rewards with pool manager constraints
+    for asset, amount in required_rewards.items():
+        agent_key = f"{asset.lower()}_maxi"
+        # Get daily rewards with budget constraints
+        daily_amount = amount / timesteps_per_year
+        actual_rewards = pool_manager.get_pool_rewards(asset, daily_amount)
+        
+        # Apply rewards to agent
+        if actual_rewards > 0:
+            agents[agent_key].add_rewards(actual_rewards * timesteps_per_year)
+    
+    return {
+        "target_yields": target_yields,
+        "pool_manager": pool_manager,
+        "agents": agents
+    }
+
+
 
 
 ###########################
@@ -73,14 +199,11 @@ def policy_update_inflation_and_rewards(params, step, h, s):
     total_annual_inflation_rewards_usd = total_annual_inflation_rewards_in_avl * avl_price
     total_fdv = total_supply * avl_price
     
-    # Calculate fusion rewards allocation
-    fusion_allocation_pct = s['fusion_rewards_allocation']
-    total_annual_rewards_fusion_usd = fusion_allocation_pct * total_annual_inflation_rewards_usd
+
 
     return {
         "total_annual_inflation_rewards_in_avl": total_annual_inflation_rewards_in_avl,
         "total_annual_inflation_rewards_usd": total_annual_inflation_rewards_usd,
-        "total_annual_rewards_fusion_usd": total_annual_rewards_fusion_usd,
         "total_fdv": total_fdv,
         "inflation_rate": inflation_rate
     }
@@ -93,31 +216,34 @@ def policy_update_inflation_and_rewards(params, step, h, s):
 def policy_calc_security_shares(params, step, h, s):
     """Calculate security shares and allocate rewards using agent-based structure"""
     agents = s['agents'].copy()
-    avl_agent = agents['avl_maxi']
-    eth_agent = agents['eth_maxi']
+    pool_manager = s.get('pool_manager')
+    total_security = 0
+    staking_ratio_fusion = {}
     
-    # Get core metrics from agents
-    print(agents)
-    avl_tvl = avl_agent.total_tvl
-    eth_tvl = eth_agent.total_tvl
-    total_security = avl_tvl + eth_tvl
-    
-
-    # Calculate rewards allocation
-    total_rewards_in_avl = s["total_annual_inflation_rewards_in_avl"]
-    avl_rewards = s["avl_rewards_allocation"] * total_rewards_in_avl
-    eth_rewards = (1 - s["avl_rewards_allocation"]) * total_rewards_in_avl
-    
-    # Update agent rewards (converting USD to token amounts)
-    avl_agent.add_rewards(avl_rewards)
-    eth_agent.add_rewards(eth_rewards)
+    # Get active pools from pool manager
+    if pool_manager:
+        active_pools = [pool for pool in pool_manager._allocated_budgets.keys() 
+                       if pool not in pool_manager._deleted_pools]
+    else:
+        active_pools = []
+        
+    # Calculate total security from active pools
+    for asset in active_pools:
+        agent_key = f'{asset.lower()}_maxi'
+        if agent_key in agents:
+            total_security += agents[agent_key].total_tvl
+            
+    # Calculate staking ratio for each active pool
+    for asset in active_pools:
+        agent_key = f'{asset.lower()}_maxi'
+        if agent_key in agents:
+            staking_ratio_fusion[asset] = (agents[agent_key].total_tvl / total_security 
+                                         if total_security > 0 else 0.0)
     
     return {
         "total_security": total_security,
-        "agents": agents,
-        "staking_ratio_all": avl_tvl / s["total_fdv"] + params["native_staking_ratio"] if total_security > 0 else 0.0 + params["native_staking_ratio"],
-        "staking_ratio_avl_fusion": avl_tvl / total_security if total_security > 0 else 0.0,
-        "staking_ratio_eth_fusion": eth_tvl / total_security if total_security > 0 else 0.0
+        "staking_ratio_all": agents['avl_maxi'].total_tvl / s["total_fdv"] + params["native_staking_ratio"],
+        "staking_ratio_fusion": staking_ratio_fusion
     }
 
 

@@ -4,49 +4,67 @@
 # Cold start duration: 12 months
 
 from model.agents_class import AgentStake
+from model.pool_management import PoolManager
+import numpy as np
 
 
 def policy_cold_start_staking(params, substep, state_history, previous_state):
-    """Unified cold start policy with direct agent updates"""
+    """
+    Unified cold start policy with sigmoid-based deposit/withdrawal flows
+    """
     # Get state and parameters
     timestep = previous_state['timestep']
     agents = previous_state['agents'].copy()
-    print("[DEBUG] policy_cold_start_staking")
-    print(agents)
+    pool_manager = previous_state.get('pool_manager')
+    btc_activation = params.get('btc_activation_day', 180)
     
-    # Calculate current yields
-    avl_yield = agents['avl_maxi'].current_yield * 100 if timestep >1 else 20
-    eth_yield = agents['eth_maxi'].current_yield * 100 if timestep >1 else 10
-    print(avl_yield)
-    print(eth_yield)
-    
-    # Apply cold start boost if needed
+    # Process only during cold start period
     if timestep < params['COLD_START_DURATION_TIMESTEPS']:
-        boost = params['COLD_START_BOOST_FACTOR']
-        avl_yield *= boost
-        eth_yield *= boost
+        # Determine active pools based on BTC activation day
+        active_pools = ['AVL', 'ETH']
+        if timestep >= btc_activation:
+            active_pools.append('BTC')
         
-        # Update AVL maxi agent
-        avl_deposit = params['NEW_AVAIL_DEPOSIT_DAILY_FACTOR_DOLLAR'] * avl_yield * previous_state['AVL_security_pct']
-        print(avl_deposit)
-        agents['avl_maxi'] = update_agent_deposit(
-            agents['avl_maxi'],
-            asset='AVL',
-            usd_amount=avl_deposit,
-            price=agents['avl_maxi'].assets['AVL'].price
-        )
-        
-        # Update ETH maxi agent
-        eth_deposit = params['NEW_ETH_DEPOSIT_DAILY_FACTOR_DOLLAR'] * eth_yield * previous_state['ETH_security_pct']
-        print(eth_deposit)
-        agents['eth_maxi'] = update_agent_deposit(
-            agents['eth_maxi'],
-            asset='ETH',
-            usd_amount=eth_deposit,
-            price=agents['eth_maxi'].assets['ETH'].price
-        )
-    print("[DEBUG] policy_cold_start_staking")
-    print(agents)
+        # Calculate flows for each active pool
+        for asset in active_pools:
+            agent_key = f'{asset.lower()}_maxi'
+            agent = agents[agent_key]
+            
+            # Skip deleted pools
+            if asset not in pool_manager.get_active_pools():
+                continue
+            
+            # Get current yield for this pool
+            current_yield = agent.current_yield
+            
+            # Check if pool is at capacity
+            is_at_capacity = pool_manager.check_cap_status(asset, agent.total_tvl)
+            
+            # Calculate deposit and withdrawal flows
+            flows = pool_manager.calculate_flows(asset, current_yield, agent.total_tvl)
+            
+            # Apply net flow (deposit - withdrawal)
+            net_flow_usd = flows['deposit'] - flows['withdrawal']
+            
+            # Skip if net flow is negligible
+            if abs(net_flow_usd) < 1.0:
+                continue
+                
+            # Update agent's asset balance
+            if net_flow_usd > 0:
+                # Deposit case
+                new_tokens = net_flow_usd / agent.assets[asset].price
+                new_balance = agent.assets[asset].balance + new_tokens
+                agent.update_asset(asset, balance=new_balance)
+            else:
+                # Withdrawal case (limit by available balance)
+                tokens_to_withdraw = min(
+                    abs(net_flow_usd) / agent.assets[asset].price,
+                    agent.assets[asset].balance * 0.9  # Prevent full withdrawal
+                )
+                new_balance = max(0, agent.assets[asset].balance - tokens_to_withdraw)
+                agent.update_asset(asset, balance=new_balance)
+    
     return {'agents': agents}
 
 def update_agent_deposit(agent, asset: str, usd_amount: float, price: float):

@@ -1,5 +1,5 @@
 DELTA_TIME = 1  # days each timestep
-SIMULATION_TIME_MONTHS = 12  # number of months
+SIMULATION_TIME_MONTHS = 24  # number of months
 TIMESTEPS = (
     30 * SIMULATION_TIME_MONTHS // DELTA_TIME
 )  # number of simulation timesteps

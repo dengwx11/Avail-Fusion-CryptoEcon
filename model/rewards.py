@@ -63,5 +63,5 @@ def calculate_reward_allocation(
         "required_rewards": total_required,
         "avl_rewards": avl_rewards,
         "eth_rewards": eth_rewards,
-        "capped": capped
+        "capped": capped 
     }

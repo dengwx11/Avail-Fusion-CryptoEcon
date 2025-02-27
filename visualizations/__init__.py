@@ -31,7 +31,7 @@ def update_legend_names(fig, name_mapping=legend_state_variable_name_mapping):
 
 
 def plot_token_price_per_subset(df, scenario_names):
-    fig = make_subplots(rows=1, cols=2, subplot_titles=("AVL Prices", "ETH Prices"))
+    fig = make_subplots(rows=1, cols=3, subplot_titles=("AVL Prices", "ETH Prices", "BTC Prices"))
 
     # Extract prices from agents for each subset
     for subset in df.subset.unique():
@@ -69,6 +69,22 @@ def plot_token_price_per_subset(df, scenario_names):
             ),
             row=1, col=2
         )
+
+        # Extract BTC prices from BTC agent
+        btc_prices = [agents['btc_maxi'].assets['BTC'].price 
+                     for agents in subset_df['agents']]
+        
+        # Plot BTC prices
+        fig.add_trace(
+            go.Scatter(
+                x=subset_df["timestep"],
+                y=btc_prices,
+                name=f"{scenario_names[subset]} BTC",
+                line=dict(color=color, dash='dot'),  # Dotted line for BTC
+                mode='lines'
+            ),
+            row=1, col=3
+        )   
 
     # Rest of the layout code remains the same
     fig.update_layout(
@@ -185,7 +201,7 @@ def plot_avg_overall_yield(df):
         xaxis_title="Timestep",
         yaxis_title="Avg overall yield %",
         yaxis=dict(
-            range=[0, 80],  # Set y-axis range from 0 to 100%
+            range=[0, 20],  # Set y-axis range from 0 to 100%
         ),
         legend=dict(
             orientation="h",
@@ -207,20 +223,22 @@ def plot_avg_overall_yield(df):
 
     return fig
 
-
 def plot_yield_pct(df):
     fig = go.Figure()
 
-    # Get the first row's yield_pcts to determine dictionary keys
-    first_yield_dict = df["yield_pcts"].iloc[0]
-    agent_keys = list(first_yield_dict.keys())
+    # Get all unique agent keys across all timesteps
+    all_agent_keys = set()
+    for yield_dict in df["yield_pcts"]:
+        all_agent_keys.update(yield_dict.keys())
+    agent_keys = sorted(list(all_agent_keys))
 
     # Plot yield curve for each agent
     for i, agent_key in enumerate(agent_keys):
-
-        
         # Extract yields for this agent across all timesteps
-        yields = [yield_dict[agent_key] for yield_dict in df["yield_pcts"]]
+        yields = []
+        for yield_dict in df["yield_pcts"]:
+            # Use 0 as default if agent not present at this timestep
+            yields.append(yield_dict.get(agent_key, 0))
         
         fig.add_trace(
             go.Scatter(
@@ -267,7 +285,7 @@ def plot_yield_pct(df):
 
     return fig
 
-def plot_staking_ratio_inflation_rate(df):
+def plot_staking_ratio_inflation_rate(df, assets=['AVL', 'ETH', 'BTC']):
     fig = go.Figure()
 
     # Add three staking ratio traces with different colors
@@ -280,24 +298,17 @@ def plot_staking_ratio_inflation_rate(df):
             yaxis='y1'
         )
     )
-    fig.add_trace(
-        go.Scatter(
-            x=df["timestep"],
-            y=df["staking_ratio_avl_fusion"] * 100,
-            name="staking_ratio_avl_fusion",
-            line=dict(color=cadlabs_colorway_sequence[1], dash='dot'),
-            yaxis='y1'
+    for i, asset in enumerate(assets):
+        fig.add_trace(
+            go.Scatter(
+                x=df["timestep"],
+                y=df["staking_ratio_fusion"].apply(lambda x: x.get(asset, 0)) * 100,
+                name=f"staking_ratio_{asset}_fusion",
+                line=dict(color=cadlabs_colorway_sequence[i+1], dash='dot'),
+                yaxis='y1'
+            )
         )
-    )
-    fig.add_trace(
-        go.Scatter(
-            x=df["timestep"],
-            y=df["staking_ratio_eth_fusion"] * 100,
-            name="staking_ratio_eth_fusion",
-            line=dict(color=cadlabs_colorway_sequence[2], dash='dot'),
-            yaxis='y1'
-        )
-    )
+
 
     # Inflation Rate (secondary axis)
     fig.add_trace(
@@ -305,7 +316,7 @@ def plot_staking_ratio_inflation_rate(df):
             x=df["timestep"],
             y=df["inflation_rate"] * 100,
             name="inflation_rate",
-            line=dict(color=cadlabs_colorway_sequence[3], dash='dot'),
+            line=dict(color="#ff7f0e", dash='solid'),
             yaxis='y2'
         )
     )
@@ -342,7 +353,7 @@ def plot_staking_ratio_inflation_rate(df):
         legend=dict(
             orientation="h",
             yanchor="bottom",
-            y=-0.5,
+            y=-0.8,
             xanchor="center",
             x=0.5
         ),
