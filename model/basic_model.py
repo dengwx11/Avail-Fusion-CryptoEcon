@@ -20,7 +20,7 @@ def policy_update_token_prices(params, step, h, s):
     agents = s['agents'].copy()
     print("###########################")
     print("timestep", s["timestep"])
-    if s["timestep"] % 7 == 0: # update eth price every 7 timesteps
+    if s["timestep"] % 7 == 0: # update token prices every 7 timesteps
         for asset in ['AVL', 'ETH', 'BTC']:
             # Get the new price for the current asset from its price process
             new_price = locals()[f"{asset.lower()}_price_process"](s["timestep"])
@@ -78,15 +78,15 @@ def policy_tune_rewards_allocation(params, step, h, s):
         if total_remaining <= 0:
             if timestep < btc_activation:
                 allocations = {
-                    'AVL': params['security_pct_before_btc'].get('AVL', 0.7),
-                    'ETH': params['security_pct_before_btc'].get('ETH', 0.3),
+                    'AVL': params['security_budget_pct_before_btc'].get('AVL', 0.7),
+                    'ETH': params['security_budget_pct_before_btc'].get('ETH', 0.3),
                     'BTC': 0.0
                 }
             else:
                 allocations = {
-                    'AVL': params['security_pct_after_btc'].get('AVL', 0.5),
-                    'ETH': params['security_pct_after_btc'].get('ETH', 0.2),
-                    'BTC': params['security_pct_after_btc'].get('BTC', 0.3)
+                    'AVL': params['security_budget_pct_after_btc'].get('AVL', 0.5),
+                    'ETH': params['security_budget_pct_after_btc'].get('ETH', 0.2),
+                    'BTC': params['security_budget_pct_after_btc'].get('BTC', 0.3)
                 }
         else:
             # Use current allocation ratios
@@ -118,15 +118,15 @@ def policy_tune_rewards_allocation(params, step, h, s):
         # Allocate budget based on target security percentages
         if timestep < btc_activation:
             allocations = {
-                'AVL': params['security_pct_before_btc'].get('AVL', 0.7),
-                'ETH': params['security_pct_before_btc'].get('ETH', 0.3),
+                'AVL': params['security_budget_pct_before_btc'].get('AVL', 0.7),
+                'ETH': params['security_budget_pct_before_btc'].get('ETH', 0.3),
                 'BTC': 0.0
             }
         else:
             allocations = {
-                'AVL': params['security_pct_after_btc'].get('AVL', 0.5),
-                'ETH': params['security_pct_after_btc'].get('ETH', 0.2),
-                'BTC': params['security_pct_after_btc'].get('BTC', 0.3)
+                'AVL': params['security_budget_pct_after_btc'].get('AVL', 0.5),
+                'ETH': params['security_budget_pct_after_btc'].get('ETH', 0.2),
+                'BTC': params['security_budget_pct_after_btc'].get('BTC', 0.3)
             }
         pool_manager.allocate_budget(allocations)
     
@@ -157,12 +157,68 @@ def policy_tune_rewards_allocation(params, step, h, s):
         # Apply rewards to agent
         if actual_rewards > 0:
             agents[agent_key].add_rewards(actual_rewards * timesteps_per_year)
+        else:
+            agents[agent_key].add_rewards(0)
+    
+    # Log pool manager state for this timestep
+    if pool_manager and timestep % 1 == 0:  # Log every timestep (adjust frequency if needed)
+        log_pool_manager_state(timestep, pool_manager, agents)
     
     return {
         "target_yields": target_yields,
         "pool_manager": pool_manager,
         "agents": agents
     }
+
+def log_pool_manager_state(timestep, pool_manager, agents):
+    """Log detailed pool manager state for tracking"""
+    budget_summary = pool_manager.get_budget_summary()
+    active_pools = pool_manager.get_active_pools()
+    
+    # Header with timestep and budget summary
+    print(f"\n{'='*80}")
+    print(f"DAY {timestep} - POOL MANAGER STATUS")
+    print(f"{'='*80}")
+    
+    # Budget information
+    print(f"BUDGET SUMMARY:")
+    print(f"  Initial Budget:       {budget_summary['initial_budget']:,.2f} AVL")
+    print(f"  Current Total Budget: {budget_summary['current_total_budget']:,.2f} AVL")
+    print(f"  Allocated Budget:     {budget_summary['allocated_budget']:,.2f} AVL")
+    print(f"  Spent Budget:         {budget_summary['spent_budget']:,.2f} AVL")
+    print(f"  Unallocated Budget:   {budget_summary['unallocated_budget']:,.2f} AVL")
+    print(f"  Utilization:          {budget_summary['budget_utilization_pct']:.2f}%")
+    
+    # Pool allocation information
+    print(f"\nPOOL ALLOCATIONS:")
+    remaining_budget = pool_manager.get_remaining_budget()
+    for pool in sorted(remaining_budget.keys()):
+        agent_key = f"{pool.lower()}_maxi"
+        
+        # Get pool status
+        is_paused = pool in pool_manager._paused_deposits
+        is_deleted = pool in pool_manager._deleted_pools
+        cap_paused = pool in pool_manager._cap_paused_deposits
+        status = "DELETED" if is_deleted else ("PAUSED" if is_paused else "ACTIVE")
+        
+        # Get agent data
+        agent_tvl = agents[agent_key].total_tvl if agent_key in agents else 0
+        agent_yield = agents[agent_key].current_yield * 100 if agent_key in agents else 0
+        
+        # Get pool config
+        pool_config = pool_manager.pools.get(pool, {})
+        max_cap = pool_config.get('max_cap', float('inf'))
+        cap_display = f"{max_cap:,.2f}" if max_cap < float('inf') else "∞"
+        
+        # Print pool info
+        print(f"  {pool}:")
+        print(f"    Status:           {status}{' (CAP REACHED)' if cap_paused else ''}")
+        print(f"    Remaining Budget: {remaining_budget[pool]:,.2f} AVL")
+        print(f"    Current TVL:      ${agent_tvl:,.2f}")
+        print(f"    Current Yield:    {agent_yield:.2f}%")
+        print(f"    Max Cap:          ${cap_display}")
+    
+    print(f"{'='*80}\n")
 
 
 

@@ -21,8 +21,21 @@ class PoolManager:
     _deleted_pools: Set[str] = field(default_factory=set)
     _cap_paused_deposits: Set[str] = field(default_factory=set)
     
+    # Budget tracking
+    _initial_budget: float = field(default=0.0)
+    _spent_budget: float = field(default=0.0)
+    
+    # Track pools with zero yield due to budget depletion
+    _zero_yield_pools: Set[str] = field(default_factory=set)
+    
     def __post_init__(self):
-        """Initialize default pool parameters if not provided"""
+        """Initialize default pool parameters and budget tracking"""
+        # Store initial budget for reference
+        self._initial_budget = self.total_budget
+        
+        # Track pools with zero yield due to budget depletion
+        self._zero_yield_pools = set()
+        
         # Default parameters for each pool type
         default_params = {
             'AVL': {
@@ -114,13 +127,14 @@ class PoolManager:
         self._paused_deposits.add(pool_type)
         self._allocated_budgets[pool_type] = 0.0
     
-    def calculate_flows(self, pool_type: str, current_apy: float, current_tvl: float) -> Dict[str, float]:
+    def calculate_flows(self, pool_type: str, current_apy: float, current_tvl: float = 0) -> Dict[str, float]:
         """
-        Calculate deposit and withdrawal flows using sigmoid functions.
+        Calculate deposit and withdrawal flows based on current APY.
         
         Args:
             pool_type: Type of pool (AVL, ETH, BTC)
             current_apy: Current APY for this pool
+            current_tvl: Current TVL for the pool
             
         Returns:
             Dict with 'deposit' and 'withdrawal' amounts in USD
@@ -128,6 +142,9 @@ class PoolManager:
         if pool_type in self._deleted_pools:
             return {'deposit': 0.0, 'withdrawal': current_tvl}
             
+        # Check if pool has zero yield due to budget depletion
+        budget_depleted = hasattr(self, '_zero_yield_pools') and pool_type in self._zero_yield_pools
+        
         pool_config = self.pools.get(pool_type, {})
         
         # Calculate deposit flow (sigmoid function)
@@ -140,8 +157,8 @@ class PoolManager:
         sigmoid_factor = 1.0 / (1.0 + np.exp(-deposit_k * (current_apy - apy_threshold)))
         deposit_flow = base_deposit + max_extra_deposit * sigmoid_factor
         
-        # If deposits are paused, set to zero
-        if pool_type in self._paused_deposits:
+        # If deposits are paused or budget is depleted, set to zero
+        if pool_type in self._paused_deposits or budget_depleted:
             deposit_flow = 0.0
             
         # Calculate withdrawal flow (inverse sigmoid)
@@ -152,6 +169,13 @@ class PoolManager:
         # Sigmoid function for withdrawals (inverse relation to APY)
         sigmoid_factor = 1.0 / (1.0 + np.exp(-withdrawal_k * (apy_threshold - current_apy)))
         withdrawal_flow = base_withdrawal + max_extra_withdrawal * sigmoid_factor
+        
+        # If budget is depleted, increase withdrawals dramatically
+        if budget_depleted:
+            # Apply a rapid 30-day decay factor (withdraw ~10-15% per day)
+            panic_withdrawal = current_tvl * 0.15
+            withdrawal_flow = max(withdrawal_flow, panic_withdrawal)
+            print(f"  ALERT: {pool_type} pool has depleted budget - rapid withdrawals in progress")
         
         return {
             'deposit': deposit_flow,
@@ -197,11 +221,30 @@ class PoolManager:
         # Update remaining budget
         self._allocated_budgets[pool_type] -= actual_rewards
         
+        # Track spent budget
+        self._spent_budget += actual_rewards
+        
         return actual_rewards
     
     def get_remaining_budget(self) -> Dict[str, float]:
         """Get remaining budget for each pool"""
         return self._allocated_budgets.copy()
+    
+    def get_total_remaining_budget(self) -> float:
+        """Get total remaining budget across all pools"""
+        return sum(self._allocated_budgets.values())
+    
+    def get_budget_summary(self) -> Dict[str, float]:
+        """Get summary of budget allocation and usage"""
+        return {
+            'initial_budget': self._initial_budget,
+            'current_total_budget': self.total_budget,
+            'allocated_budget': sum(self._allocated_budgets.values()),
+            'spent_budget': self._spent_budget,
+            'unallocated_budget': self.total_budget - sum(self._allocated_budgets.values()),
+            'budget_utilization_pct': (self._spent_budget / self._initial_budget * 100) 
+                                     if self._initial_budget > 0 else 0.0
+        }
     
     def get_active_pools(self) -> List[str]:
         """Get list of active (non-deleted) pools"""

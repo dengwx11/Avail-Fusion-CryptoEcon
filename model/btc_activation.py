@@ -8,11 +8,15 @@ def policy_activate_btc_pool(params, substep, state_history, previous_state):
     
     # Check if we've reached BTC activation day
     if timestep == btc_activation_day:
+        print(f"\n{'*'*80}")
+        print(f"BTC POOL ACTIVATION - DAY {timestep}")
+        print(f"{'*'*80}")
+        
         # Update pool allocation percentages
         new_allocations = {
-            'AVL': params['security_pct_after_btc'].get('AVL', 0.5),
-            'ETH': params['security_pct_after_btc'].get('ETH', 0.2),
-            'BTC': params['security_pct_after_btc'].get('BTC', 0.3)
+            'AVL': params['security_budget_pct_after_btc'].get('AVL', 0.5),
+            'ETH': params['security_budget_pct_after_btc'].get('ETH', 0.2),
+            'BTC': params['security_budget_pct_after_btc'].get('BTC', 0.3)
         }
         
         # Update pool manager allocations
@@ -35,5 +39,16 @@ def policy_activate_btc_pool(params, substep, state_history, previous_state):
         
         # Resume BTC deposits (ensure it's active)
         pool_manager.resume_deposits('BTC')
+        
+        # Log the BTC pool configuration
+        print(f"BTC Pool Configuration:")
+        for key, value in btc_config.items():
+            print(f"  {key}: {value}")
+        
+        print(f"New budget allocations:")
+        for asset, allocation in new_allocations.items():
+            print(f"  {asset}: {allocation*100:.1f}%")
+        
+        print(f"{'*'*80}\n")
     
     return {'pool_manager': pool_manager} 

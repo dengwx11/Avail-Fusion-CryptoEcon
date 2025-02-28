@@ -38,13 +38,13 @@ class FusionParams:
     ])
 
     # ADD BTC staking pool
-    # Security percentages before BTC activation - list of dicts
-    security_pct_before_btc: List[Dict] = default([
+    # Security budget allocation percentages before BTC activation - list of dicts
+    security_budget_pct_before_btc: List[Dict] = default([
         {'AVL': 1, 'ETH': 0 , 'BTC': 0}
     ])
-    # Security percentages after BTC activation - list of dicts 
-    security_pct_after_btc: List[Dict] = default([
-        {'AVL': 0.5, 'ETH': 0.2, 'BTC': 0.3}
+    # Security budget allocation percentages after BTC activation - list of dicts 
+    security_budget_pct_after_btc: List[Dict] = default([
+        {'AVL': 0.9, 'ETH': 0, 'BTC': 0.1}
     ])
     
     # Policy parameters with list-based defaults
@@ -52,15 +52,14 @@ class FusionParams:
     target_staking_rate: List[float] = default([0.5])
     min_inflation_rate: List[float] = default([0.01])
     max_inflation_rate: List[float] = default([0.05])
-    # TODO: add comments on cold start duration
+    # After cold start, no more new tokens are added
     COLD_START_DURATION_TIMESTEPS: List[int] = default([365])
-    NEW_DEPOSIT_DAILY_FACTOR_DOLLAR: List[Dict] = default([{'AVL': 3e4, 'ETH': 2e4, 'BTC': 5e5}])
     COLD_START_BOOST_FACTOR: List[float] = default([1])
 
     # New parameter for security budget replenishment schedule
     # Dictionary mapping timestep to amount of new tokens to add
     security_budget_replenishment: List[Dict] = default([
-        {30: 5e6, 60: 5e6, 90: 5e6, 120: 5e6, 150: 5e6, 180: 10e6}  # Example schedule
+        {30: 5e6, 60: 5e6, 90: 5e6, 120: 5e6, 150: 5e6, 180: 10e6}  # security budget replenishment schedule
     ])
 
     def __post_init__(self):

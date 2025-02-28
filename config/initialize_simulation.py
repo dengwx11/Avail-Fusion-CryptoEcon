@@ -105,23 +105,23 @@ def initialize_state(init_total_fdv, constants, rewards_result, seed):
     pool_manager.pools = {
         'AVL': {
                 'base_deposit': 5e4,
-                'max_extra_deposit': 1e5,
+                'max_extra_deposit': 5e5,
                 'deposit_k': 5.0, # sensitivity of deposit flow to APY
                 'apy_threshold': 0.10,  # 10%
                 'base_withdrawal': 5e3,
-                'max_extra_withdrawal': 1e5,
+                'max_extra_withdrawal': 3e5,
                 'withdrawal_k': 7.0, # sensitivity of withdrawal flow to APY
                 'max_cap': float('inf')
         },
         'ETH': {
-                'base_deposit': 5e4,
-                'max_extra_deposit': 5e5,
+                'base_deposit': 1e4,
+                'max_extra_deposit': 1e4,
                 'deposit_k': 8.0,
                 'apy_threshold': 0.03,  # 3%
-                'base_withdrawal': 5e3,
-                'max_extra_withdrawal': 1.5e5,
+                'base_withdrawal': 1e3,
+                'max_extra_withdrawal': 1e4,
                 'withdrawal_k': 10.0,
-                'max_cap': float('inf')
+                'max_cap': 30e6
         }
     }
     

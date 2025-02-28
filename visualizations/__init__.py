@@ -353,7 +353,7 @@ def plot_staking_ratio_inflation_rate(df, assets=['AVL', 'ETH', 'BTC']):
         legend=dict(
             orientation="h",
             yanchor="bottom",
-            y=-0.8,
+            y=-1,
             xanchor="center",
             x=0.5
         ),

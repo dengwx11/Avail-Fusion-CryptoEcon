@@ -20,6 +20,11 @@ def policy_cold_start_staking(params, substep, state_history, previous_state):
     
     # Process only during cold start period
     if timestep < params['COLD_START_DURATION_TIMESTEPS']:
+        # Log cold start header once per 7 days
+        if timestep % 7 == 0:
+            print(f"\nCOLD START FLOWS - DAY {timestep}")
+            print(f"{'-'*60}")
+        
         # Determine active pools based on BTC activation day
         active_pools = ['AVL', 'ETH']
         if timestep >= btc_activation:
@@ -43,14 +48,12 @@ def policy_cold_start_staking(params, substep, state_history, previous_state):
             # Calculate deposit and withdrawal flows
             flows = pool_manager.calculate_flows(asset, current_yield, agent.total_tvl)
             
-            # Apply net flow (deposit - withdrawal)
+            # Log significant flows
             net_flow_usd = flows['deposit'] - flows['withdrawal']
+            if abs(net_flow_usd) > 1000:  # Only log significant flows
+                print(f"  {asset} Flow: ${net_flow_usd:,.2f} (D: ${flows['deposit']:,.2f}, W: ${flows['withdrawal']:,.2f})")
             
-            # Skip if net flow is negligible
-            if abs(net_flow_usd) < 1.0:
-                continue
-                
-            # Update agent's asset balance
+            # Apply net flow (deposit - withdrawal)
             if net_flow_usd > 0:
                 # Deposit case
                 new_tokens = net_flow_usd / agent.assets[asset].price
