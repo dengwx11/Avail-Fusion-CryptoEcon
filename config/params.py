@@ -34,7 +34,7 @@ class FusionParams:
         
     ])
     target_yields: List[Dict] = default([
-        {1: {"AVL": 0.15, "ETH": 0.035, "BTC": 0}}  # BTC target yield
+        {1: {"AVL": 0.15, "ETH": 0.035, "BTC": 0}, 50: {"AVL": 0.15, "ETH": 0.1, "BTC": 0}}  # BTC target yield
     ])
 
     # ADD BTC staking pool
@@ -43,6 +43,7 @@ class FusionParams:
         {'AVL': 0.7, 'ETH': 0.3 , 'BTC': 0}
     ])
     # Security budget allocation percentages after BTC activation - list of dicts 
+    # TODO: don't actively set the params, should be removed.
     security_budget_pct_after_btc: List[Dict] = default([
         {'AVL': 0.9, 'ETH': 0, 'BTC': 0.1}
     ])
@@ -58,6 +59,7 @@ class FusionParams:
 
     # New parameter for security budget replenishment schedule
     # Dictionary mapping timestep to amount of new tokens to add
+    # TODO: need to redisgn this to only replenish to a given staking pool
     security_budget_replenishment: List[Dict] = default([
         {30: 5e6, 60: 5e6, 90: 5e6, 120: 5e6, 150: 5e6, 180: 10e6}  # security budget replenishment schedule
     ])

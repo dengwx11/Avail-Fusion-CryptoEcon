@@ -114,14 +114,14 @@ def initialize_state(init_total_fdv, constants, rewards_result, seed):
                 'max_cap': float('inf')
         },
         'ETH': {
-                'base_deposit': 1e4,
-                'max_extra_deposit': 1e4,
+                'base_deposit': 3e4,
+                'max_extra_deposit': 5e4,
                 'deposit_k': 8.0,
                 'apy_threshold': 0.03,  # 3%
-                'base_withdrawal': 1e3,
-                'max_extra_withdrawal': 1e4,
+                'base_withdrawal': 1e4,
+                'max_extra_withdrawal': 3e4,
                 'withdrawal_k': 10.0,
-                'max_cap': 30e6
+                'max_cap': 100e6 # TODO: check it for TVL or balance
         }
     }
     
