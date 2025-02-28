@@ -354,3 +354,68 @@ def policy_calc_security_shares(params, step, h, s):
 
 
 
+
+###########################
+# admin pool actions
+###########################
+
+def policy_admin_pool_actions(params, step, h, s):
+    """
+    Policy to execute admin actions on pools at specified timesteps:
+    - Pause deposits for specific pools
+    - Resume deposits for specific pools
+    - Delete specific pools
+    """
+    timestep = s["timestep"]
+    pool_manager = s.get("pool_manager")
+    admin_actions_performed = False
+    
+    if not pool_manager:
+        return {"pool_manager": pool_manager}
+    
+    # Check for admin pause deposits
+    pause_deposits = params.get("admin_pause_deposits", {}).get(timestep, [])
+    if pause_deposits:
+        for pool_type in pause_deposits:
+            if pool_type in pool_manager.get_active_pools():
+                pool_manager.pause_deposits(pool_type)
+                print(f"ADMIN ACTION: Paused deposits for {pool_type} pool at day {timestep}")
+                admin_actions_performed = True
+    
+    # Check for admin resume deposits
+    resume_deposits = params.get("admin_resume_deposits", {}).get(timestep, [])
+    if resume_deposits:
+        for pool_type in resume_deposits:
+            if pool_type in pool_manager.pools and pool_type in pool_manager._paused_deposits:
+                pool_manager.resume_deposits(pool_type)
+                print(f"ADMIN ACTION: Resumed deposits for {pool_type} pool at day {timestep}")
+                admin_actions_performed = True
+    
+    # Check for admin delete pools
+    delete_pools = params.get("admin_delete_pools", {}).get(timestep, [])
+    if delete_pools:
+        for pool_type in delete_pools:
+            if pool_type in pool_manager.get_active_pools():
+                # Add the pool to deleted pools
+                pool_manager._deleted_pools.add(pool_type)
+                # Also pause deposits for the deleted pool
+                pool_manager.pause_deposits(pool_type)
+                print(f"ADMIN ACTION: Deleted {pool_type} pool at day {timestep}")
+                admin_actions_performed = True
+    
+    # Log all admin actions in detail if any were performed
+    if admin_actions_performed:
+        print(f"\n{'#'*80}")
+        print(f"ADMIN POOL ACTIONS - DAY {timestep}")
+        print(f"{'#'*80}")
+        print(f"Active pools after admin actions: {pool_manager.get_active_pools()}")
+        print(f"Paused deposits: {pool_manager._paused_deposits}")
+        print(f"Deleted pools: {pool_manager._deleted_pools}")
+        print(f"{'#'*80}\n")
+    
+    return {"pool_manager": pool_manager}
+
+
+
+
+

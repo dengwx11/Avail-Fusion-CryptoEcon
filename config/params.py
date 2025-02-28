@@ -40,7 +40,7 @@ class FusionParams:
     # ADD BTC staking pool
     # Security budget allocation percentages before BTC activation - list of dicts
     security_budget_pct_before_btc: List[Dict] = default([
-        {'AVL': 1, 'ETH': 0 , 'BTC': 0}
+        {'AVL': 0.7, 'ETH': 0.3 , 'BTC': 0}
     ])
     # Security budget allocation percentages after BTC activation - list of dicts 
     security_budget_pct_after_btc: List[Dict] = default([
@@ -60,6 +60,19 @@ class FusionParams:
     # Dictionary mapping timestep to amount of new tokens to add
     security_budget_replenishment: List[Dict] = default([
         {30: 5e6, 60: 5e6, 90: 5e6, 120: 5e6, 150: 5e6, 180: 10e6}  # security budget replenishment schedule
+    ])
+
+    # New parameters for admin actions to pause deposits or delete pools
+    admin_pause_deposits: List[Dict] = default([
+        {30: ['ETH']} 
+    ])
+
+    admin_resume_deposits: List[Dict] = default([
+        {50: ['ETH']} 
+    ])
+
+    admin_delete_pools: List[Dict] = default([
+        {100: ['ETH']} 
     ])
 
     def __post_init__(self):

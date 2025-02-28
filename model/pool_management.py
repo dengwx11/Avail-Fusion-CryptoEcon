@@ -28,6 +28,9 @@ class PoolManager:
     # Track pools with zero yield due to budget depletion
     _zero_yield_pools: Set[str] = field(default_factory=set)
     
+    # New attribute for deleted pool reason
+    _deleted_pool_reason: Dict[str, str] = field(default_factory=dict)
+    
     def __post_init__(self):
         """Initialize default pool parameters and budget tracking"""
         # Store initial budget for reference
@@ -122,10 +125,29 @@ class PoolManager:
             self._cap_paused_deposits.remove(pool_type)
     
     def delete_pool(self, pool_type: str):
-        """Delete a pool (stop rewards and new deposits)"""
-        self._deleted_pools.add(pool_type)
-        self._paused_deposits.add(pool_type)
-        self._allocated_budgets[pool_type] = 0.0
+        """
+        Mark a pool as deleted, which will stop all deposits
+        and gradually drain all funds through withdrawals.
+        
+        Args:
+            pool_type: Type of pool (AVL, ETH, BTC)
+        """
+        if pool_type not in self._deleted_pools:
+            self._deleted_pools.add(pool_type)
+            # Also pause deposits for deleted pools
+            self.pause_deposits(pool_type)
+            # Set special flag for deletion to distinguish from regular pauses
+            self._deleted_pool_reason = getattr(self, '_deleted_pool_reason', {})
+            self._deleted_pool_reason[pool_type] = "ADMIN_DELETED"
+            
+            print(f"Pool {pool_type} marked as deleted by admin action")
+            
+        # Return any remaining allocated budget to the unallocated pool
+        remaining_budget = self._allocated_budgets.get(pool_type, 0)
+        if remaining_budget > 0:
+            self._allocated_budgets[pool_type] = 0
+            # Note: We're not redistributing the budget automatically
+            print(f"Returned {remaining_budget:,.2f} AVL from deleted {pool_type} pool to unallocated budget")
     
     def calculate_flows(self, pool_type: str, current_apy: float, current_tvl: float = 0) -> Dict[str, float]:
         """
@@ -139,9 +161,13 @@ class PoolManager:
         Returns:
             Dict with 'deposit' and 'withdrawal' amounts in USD
         """
+        # For deleted pools, stop all deposits and accelerate withdrawals
         if pool_type in self._deleted_pools:
-            return {'deposit': 0.0, 'withdrawal': current_tvl}
-            
+            # For deleted pools, rapidly withdraw funds (30% per day)
+            accelerated_withdrawal = current_tvl * 0.3
+            print(f"  DELETED POOL: {pool_type} - accelerated withdrawal of ${accelerated_withdrawal:,.2f}")
+            return {'deposit': 0.0, 'withdrawal': accelerated_withdrawal}
+        
         # Check if pool has zero yield due to budget depletion
         budget_depleted = hasattr(self, '_zero_yield_pools') and pool_type in self._zero_yield_pools
         

@@ -79,5 +79,13 @@ psub = [
             "pool_manager": utils.generic_state_updater("pool_manager"),
             "agents": utils.generic_state_updater("agents"),
         }
+    },
+    {
+        "policies": {
+            "action": basic_model.policy_admin_pool_actions
+        },
+        "variables": {
+            "pool_manager": utils.generic_state_updater("pool_manager"),
+        }
     }
 ]
