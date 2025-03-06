@@ -12,7 +12,7 @@ from config.config import COLD_START_DURATION_TIMESTEPS
 class FusionParams:
     """Dynamic simulation parameters with dependency injection for multiple runs"""
     
-    # External dependencies (list of dictionaries for multiple runs)
+    ### External dependencies (list of dictionaries for multiple runs) ###
     constants: List[Dict]
     avl_price_samples: List[List[float]]  # Price samples per run
     eth_price_samples: List[List[float]]  # Price samples per run
@@ -22,49 +22,28 @@ class FusionParams:
     agents: List[AgentStake]
     btc_activation_day: List[int]
 
-    # Derived parameters (initialized in post_init)
+    ### Derived parameters (initialized in post_init) ###
     native_staking_ratio: List[float] = field(init=False)
     avl_price_process: List[Callable[[int, int], float]] = field(init=False)
     eth_price_process: List[Callable[[int, int], float]] = field(init=False)
-    inflation_rate: List[float] = field(init=False)
 
-    # ADMIN: fusion pallete
-    fusion_palette_avl_token: List[Dict] = default([
-        {1: {'AVL': 30e6, 'ETH': 10e6, 'BTC': 0}}  # Added BTC allocation
-        
-    ])
+    ### ADMIN: fusion pallete ###
     target_yields: List[Dict] = default([
         {1: {"AVL": 0.15, "ETH": 0.035, "BTC": 0}, 50: {"AVL": 0.15, "ETH": 0.1, "BTC": 0}}  # BTC target yield
     ])
-
-    # ADD BTC staking pool
-    # Security budget allocation percentages before BTC activation - list of dicts
-    security_budget_pct_before_btc: List[Dict] = default([
-        {'AVL': 0.7, 'ETH': 0.3 , 'BTC': 0}
-    ])
-    # Security budget allocation percentages after BTC activation - list of dicts 
-    # TODO: don't actively set the params, should be removed.
-    security_budget_pct_after_btc: List[Dict] = default([
-        {'AVL': 0.9, 'ETH': 0, 'BTC': 0.1}
-    ])
-    
-    # Policy parameters with list-based defaults
-    inflation_decay: List[float] = default([0.05])
-    target_staking_rate: List[float] = default([0.5])
-    min_inflation_rate: List[float] = default([0.01])
-    max_inflation_rate: List[float] = default([0.05])
-    # After cold start, no more new tokens are added
-    COLD_START_DURATION_TIMESTEPS: List[int] = default([365])
-    COLD_START_BOOST_FACTOR: List[float] = default([1])
-
-    # New parameter for security budget replenishment schedule
-    # Dictionary mapping timestep to amount of new tokens to add
-    # TODO: need to redisgn this to only replenish to a given staking pool
+    # Security budget replenishment schedule
+    # Dictionary mapping timestep to pool-specific token allocations
     security_budget_replenishment: List[Dict] = default([
-        {30: 5e6, 60: 5e6, 90: 5e6, 120: 5e6, 150: 5e6, 180: 10e6}  # security budget replenishment schedule
+        {
+            30: {'AVL': 4e6, 'ETH': 1e6},
+            60: {'AVL': 3e6, 'ETH': 2e6},
+            90: {'AVL': 3e6, 'ETH': 2e6},
+            120: {'AVL': 3e6, 'ETH': 2e6},
+            150: {'AVL': 3e6, 'ETH': 2e6},
+            180: {'AVL': 5e6, 'ETH': 2e6, 'BTC': 3e6}
+        }
     ])
-
-    # New parameters for admin actions to pause deposits or delete pools
+    # Admin actions to pause deposits or delete pools
     admin_pause_deposits: List[Dict] = default([
         {30: ['ETH']} 
     ])
@@ -76,6 +55,55 @@ class FusionParams:
     admin_delete_pools: List[Dict] = default([
         {100: ['ETH']} 
     ])
+
+
+    ### Policy parameters with list-based defaults ###
+    inflation_decay: List[float] = default([0.05])
+    target_staking_rate: List[float] = default([0.5])
+    min_inflation_rate: List[float] = default([0.01])
+    max_inflation_rate: List[float] = default([0.05])
+
+    ### After cold start, no more new tokens are added ###
+    COLD_START_DURATION_TIMESTEPS: List[int] = default([365])
+    COLD_START_BOOST_FACTOR: List[float] = default([1])
+
+
+    ### Pool Manager config ###
+    # BTC pool configuration - will be used when BTC is activated
+    btc_pool_config: List[Dict] = default([{
+        'base_deposit': 1e5,
+        'max_extra_deposit': 4e5,
+        'deposit_k': 6.0,
+        'apy_threshold': 0.02,  # 2%
+        'base_withdrawal': 8e3,
+        'max_extra_withdrawal': 2e5,
+        'withdrawal_k': 9.0,
+        'max_cap': float('inf')
+    }])
+
+    # Initial pool configurations
+    initial_pool_configs: List[Dict] = default([{
+        'AVL': {
+            'base_deposit': 5e4,
+            'max_extra_deposit': 5e5,
+            'deposit_k': 5.0,
+            'apy_threshold': 0.10,
+            'base_withdrawal': 5e3,
+            'max_extra_withdrawal': 3e5,
+            'withdrawal_k': 7.0,
+            'max_cap': float('inf')
+        },
+        'ETH': {
+            'base_deposit': 3e4,
+            'max_extra_deposit': 5e4,
+            'deposit_k': 8.0,
+            'apy_threshold': 0.03,
+            'base_withdrawal': 1e4,
+            'max_extra_withdrawal': 3e4,
+            'withdrawal_k': 10.0,
+            'max_cap': 100e6
+        }
+    }])
 
     def __post_init__(self):
         """Initialize derived parameters for multiple runs"""
@@ -99,11 +127,7 @@ class FusionParams:
             for run in range(len(self.lens_price_samples))
         ]
 
-        # Inflation rate from rewards results
-        self.inflation_rate = [result["init_inflation_rate"] for result in self.rewards_result]
-        
         # Native staking ratio from constants
         self.native_staking_ratio = [constant["native_staking_ratio"] for constant in self.constants]
 
-        self.fusion_palette_avl_token[0][self.btc_activation_day[0]] = {'AVL': 0, 'ETH': 5e6, 'BTC': 15e6}
         self.target_yields[0][self.btc_activation_day[0]] = {"AVL": 0.15, "ETH": 0.035, "BTC": 0.05}

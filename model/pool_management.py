@@ -60,17 +60,17 @@ class PoolManager:
                 'max_extra_withdrawal': 1.5e5,
                 'withdrawal_k': 10.0,
                 'max_cap': float('inf')
-            },
-            'BTC': {
-                'base_deposit': 1e5,
-                'max_extra_deposit': 4e5,
-                'deposit_k': 6.0,
-                'apy_threshold': 0.02,  # 2%
-                'base_withdrawal': 8e3,
-                'max_extra_withdrawal': 2e5,
-                'withdrawal_k': 9.0,
-                'max_cap': float('inf')
             }
+            # ,'BTC': {
+            #     'base_deposit': 1e5,
+            #     'max_extra_deposit': 4e5,
+            #     'deposit_k': 6.0,
+            #     'apy_threshold': 0.02,  # 2%
+            #     'base_withdrawal': 8e3,
+            #     'max_extra_withdrawal': 2e5,
+            #     'withdrawal_k': 9.0,
+            #     'max_cap': float('inf')
+            # }
         }
         
         # Initialize pools with default parameters if not provided
@@ -274,4 +274,20 @@ class PoolManager:
     
     def get_active_pools(self) -> List[str]:
         """Get list of active (non-deleted) pools"""
-        return [pool for pool in self.pools.keys() if pool not in self._deleted_pools] 
+        # Only include pools that are both defined and not deleted
+        return [pool for pool in self.pools.keys() 
+                if pool not in self._deleted_pools]
+    
+    def is_pool_active(self, pool_type: str) -> bool:
+        """
+        Check if a pool exists, is not deleted, and accepts deposits
+        
+        Args:
+            pool_type: Type of pool to check
+            
+        Returns:
+            True if pool exists, is not deleted, and accepts deposits
+        """
+        return (pool_type in self.pools and 
+                pool_type not in self._deleted_pools and
+                pool_type not in self._paused_deposits) 

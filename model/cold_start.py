@@ -27,7 +27,7 @@ def policy_cold_start_staking(params, substep, state_history, previous_state):
         
         # Determine active pools based on BTC activation day
         active_pools = ['AVL', 'ETH']
-        if timestep >= btc_activation:
+        if timestep >= btc_activation and 'BTC' in pool_manager.pools:
             active_pools.append('BTC')
         
         # Calculate flows for each active pool
@@ -35,8 +35,12 @@ def policy_cold_start_staking(params, substep, state_history, previous_state):
             agent_key = f'{asset.lower()}_maxi'
             agent = agents[agent_key]
             
+            # Skip pools that don't exist in the pool manager
+            if asset not in pool_manager.pools:
+                continue
+            
             # Skip deleted pools
-            if asset not in pool_manager.get_active_pools():
+            if asset in pool_manager._deleted_pools:
                 continue
             
             # Get current yield for this pool

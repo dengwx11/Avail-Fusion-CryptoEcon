@@ -62,73 +62,28 @@ def policy_tune_rewards_allocation(params, step, h, s):
         pool_manager = PoolManager(total_budget=initial_budget)
     
     # Check for budget replenishment schedule
-    budget_replenishment = params.get("security_budget_replenishment", {}).get(timestep, 0)
-    if budget_replenishment > 0:
-        # Admin is adding new tokens to the security budget
-        print(f"[DEBUG] Replenishing security budget with {budget_replenishment} tokens")
+    budget_replenishment = params.get("security_budget_replenishment", {}).get(timestep)
+    if budget_replenishment:
+        # Admin is adding new tokens to specific pools
+        print(f"\n{'$'*80}")
+        print(f"SECURITY BUDGET REPLENISHMENT - DAY {timestep}")
+        print(f"{'$'*80}")
         
-        # Get current budget and allocations before adding new funds
-        current_budget = pool_manager.total_budget
-        remaining_budget = pool_manager.get_remaining_budget()
-        
-        # Calculate the current allocation ratios from remaining budget
-        total_remaining = sum(remaining_budget.values())
-        
-        # Default allocations if all budget has been spent
-        if total_remaining <= 0:
-            if timestep < btc_activation:
-                allocations = {
-                    'AVL': params['security_budget_pct_before_btc'].get('AVL', 0.7),
-                    'ETH': params['security_budget_pct_before_btc'].get('ETH', 0.3),
-                    'BTC': 0.0
-                }
-            else:
-                allocations = {
-                    'AVL': params['security_budget_pct_after_btc'].get('AVL', 0.5),
-                    'ETH': params['security_budget_pct_after_btc'].get('ETH', 0.2),
-                    'BTC': params['security_budget_pct_after_btc'].get('BTC', 0.3)
-                }
-        else:
-            # Use current allocation ratios
-            allocations = {
-                pool: budget / total_remaining
-                for pool, budget in remaining_budget.items()
-                if pool not in pool_manager._deleted_pools
-            }
-            
-            # Normalize allocations to sum to 1
-            allocation_sum = sum(allocations.values())
-            if allocation_sum > 0:
-                allocations = {k: v/allocation_sum for k, v in allocations.items()}
+        total_replenishment = sum(budget_replenishment.values())
+        print(f"Adding {total_replenishment:,.0f} AVL tokens to security budget")
         
         # Update pool manager's total budget
-        pool_manager.total_budget += budget_replenishment
+        pool_manager.total_budget += total_replenishment
         
-        # Allocate new budget according to the current ratios
-        new_budget_allocation = {k: v * budget_replenishment for k, v in allocations.items()}
-        
-        # Add new allocation to each pool's budget
-        for pool, amount in new_budget_allocation.items():
+        # Add new allocation directly to each specified pool's budget
+        for pool, amount in budget_replenishment.items():
             if pool not in pool_manager._deleted_pools:
+                # Add the replenishment amount to the pool's allocated budget
                 pool_manager._allocated_budgets[pool] = pool_manager._allocated_budgets.get(pool, 0) + amount
+                print(f"  {pool} pool: +{amount:,.0f} AVL tokens")
+        
+        print(f"{'$'*80}\n")
     
-    # Handle BTC activation (existing code)
-    if timestep == btc_activation:
-        # Adjust budget allocations for BTC activation
-        # Allocate budget based on target security percentages
-        if timestep < btc_activation:
-            allocations = {
-                'AVL': params['security_budget_pct_before_btc'].get('AVL', 0.7),
-                'ETH': params['security_budget_pct_before_btc'].get('ETH', 0.3),
-                'BTC': 0.0
-            }
-        else:
-            allocations = {
-                'AVL': params['security_budget_pct_after_btc'].get('AVL', 0.5),
-                'ETH': params['security_budget_pct_after_btc'].get('ETH', 0.2),
-                'BTC': params['security_budget_pct_after_btc'].get('BTC', 0.3)
-            }
-        pool_manager.allocate_budget(allocations)
     
     # Calculate required rewards based on target yields
     timesteps_per_year = 365 / DELTA_TIME
@@ -137,7 +92,7 @@ def policy_tune_rewards_allocation(params, step, h, s):
     required_rewards = {}
     for asset, yield_pct in target_yields.items():
         # Skip assets not yet activated (BTC before activation day)
-        if asset == 'BTC' and timestep < btc_activation:
+        if asset == 'BTC' and (timestep < btc_activation or 'BTC' not in pool_manager.pools):
             continue
             
         agent = agents[f"{asset.lower()}_maxi"]
@@ -226,7 +181,6 @@ def log_pool_manager_state(timestep, pool_manager, agents):
 ###########################
 # update inflation and rewards allocation
 ###########################
-## TODO: need to verify with Gali on how to update rewards allocation
 
 def policy_update_inflation_and_rewards(params, step, h, s):
     """Calculate inflation and rewards allocation using agent-based metrics"""

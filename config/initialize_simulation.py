@@ -82,7 +82,7 @@ def calculate_required_balances(
         'BTC': btc_usd / btc_price if btc_price > 0 else 0
     }
 
-def initialize_state(init_total_fdv, constants, rewards_result, seed):
+def initialize_state(init_total_fdv, constants, rewards_result, params, seed):
     """Initialize simulation state with agents and pool manager"""
     # ... [existing initialization code] ...
     
@@ -101,37 +101,46 @@ def initialize_state(init_total_fdv, constants, rewards_result, seed):
         total_budget=30e6
     )
     
-    # Set initial pool configurations
-    pool_manager.pools = {
+    # Set initial pool configurations from params
+    pool_configs_param = params.get('initial_pool_configs', {
+        # default params
         'AVL': {
-                'base_deposit': 5e4,
-                'max_extra_deposit': 5e5,
-                'deposit_k': 5.0, # sensitivity of deposit flow to APY
-                'apy_threshold': 0.10,  # 10%
-                'base_withdrawal': 5e3,
-                'max_extra_withdrawal': 3e5,
-                'withdrawal_k': 7.0, # sensitivity of withdrawal flow to APY
-                'max_cap': float('inf')
+            'base_deposit': 5e4,
+            'max_extra_deposit': 5e5,
+            'deposit_k': 5.0,
+            'apy_threshold': 0.10,
+            'base_withdrawal': 5e3,
+            'max_extra_withdrawal': 3e5,
+            'withdrawal_k': 7.0,
+            'max_cap': float('inf')
         },
         'ETH': {
-                'base_deposit': 3e4,
-                'max_extra_deposit': 5e4,
-                'deposit_k': 8.0,
-                'apy_threshold': 0.03,  # 3%
-                'base_withdrawal': 1e4,
-                'max_extra_withdrawal': 3e4,
-                'withdrawal_k': 10.0,
-                'max_cap': 100e6 # TODO: check it for TVL or balance
+            'base_deposit': 3e4,
+            'max_extra_deposit': 5e4,
+            'deposit_k': 8.0,
+            'apy_threshold': 0.03,
+            'base_withdrawal': 1e4,
+            'max_extra_withdrawal': 3e4,
+            'withdrawal_k': 10.0,
+            'max_cap': 100e6
         }
+    })
+
+    initial_pool_configs = pool_configs_param[0] if isinstance(pool_configs_param, list) else pool_configs_param
+    pool_manager.pools = initial_pool_configs
+    
+    # Allocate initial budget - direct allocation instead of percentages
+    initial_allocations = {
+        'AVL': 21e6,  # 70% of 30M
+        'ETH': 9e6,   # 30% of 30M
+        # BTC removed - will be allocated on activation day
     }
     
-    # Allocate initial budget
-    initial_allocations = {
-        'AVL': 0.7,
-        'ETH': 0.3,
-        'BTC': 0.0  # No allocation initially
-    }
-    pool_manager.allocate_budget(initial_allocations)
+    # Set allocated budgets directly
+    for pool, amount in initial_allocations.items():
+        pool_manager._allocated_budgets[pool] = amount
+
+    
     
     # Return the initial state
     return {
