@@ -29,7 +29,8 @@ class FusionParams:
 
     ### ADMIN: fusion pallete ###
     target_yields: List[Dict] = default([
-        {1: {"AVL": 0.15, "ETH": 0.035, "BTC": 0}, 50: {"AVL": 0.15, "ETH": 0.1, "BTC": 0}}  # BTC target yield
+        {1: {"AVL": 0.15, "ETH": 0.035, "BTC": 0}, 50: {"AVL": 0.15, "ETH": 0.1, "BTC": 0},
+         180: {"AVL": 0.15, "ETH": 0.035, "BTC": 0.05}}  # BTC target yield
     ])
     # Security budget replenishment schedule
     # Dictionary mapping timestep to pool-specific token allocations
@@ -46,7 +47,7 @@ class FusionParams:
     # Admin actions to pause deposits or delete pools
     admin_pause_deposits: List[Dict] = default([
         {30: ['ETH']} 
-    ])
+    ]) # remain APY
 
     admin_resume_deposits: List[Dict] = default([
         {50: ['ETH']} 
@@ -54,10 +55,10 @@ class FusionParams:
 
     admin_delete_pools: List[Dict] = default([
         {100: ['ETH']} 
-    ])
+    ]) # APY = 0%
 
 
-    ### Policy parameters with list-based defaults ###
+    ### Inflation function parameters (Polkadot) ###
     inflation_decay: List[float] = default([0.05])
     target_staking_rate: List[float] = default([0.5])
     min_inflation_rate: List[float] = default([0.01])
@@ -101,7 +102,7 @@ class FusionParams:
             'base_withdrawal': 1e4,
             'max_extra_withdrawal': 3e4,
             'withdrawal_k': 10.0,
-            'max_cap': 100e6
+            'max_cap': 100e6 # in USD
         }
     }])
 

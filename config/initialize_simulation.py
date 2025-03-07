@@ -93,7 +93,7 @@ def initialize_state(init_total_fdv, constants, rewards_result, params, seed):
             'ETH': 0.3,
             'BTC': 0.0  # No BTC initially
         },
-        total_tvl=1.0
+        total_tvl=1
     )
     
     # Initialize pool manager
@@ -103,7 +103,7 @@ def initialize_state(init_total_fdv, constants, rewards_result, params, seed):
     
     # Set initial pool configurations from params
     pool_configs_param = params.get('initial_pool_configs', {
-        # default params
+        # default
         'AVL': {
             'base_deposit': 5e4,
             'max_extra_deposit': 5e5,
