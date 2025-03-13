@@ -332,7 +332,7 @@ def plot_staking_ratio_inflation_rate(df, assets=['AVL', 'ETH', 'BTC']):
         xaxis_title="Timestep",
         yaxis=dict(
             title="Staking Ratios (%)",
-            titlefont=dict(
+            title_font=dict(
                 color="#1f77b4"
             ),
             tickfont=dict(
@@ -341,7 +341,7 @@ def plot_staking_ratio_inflation_rate(df, assets=['AVL', 'ETH', 'BTC']):
         ),
         yaxis2=dict(
             title="Inflation Rate (%)",
-            titlefont=dict(
+            title_font=dict(
                 color="#ff7f0e"
             ),
             tickfont=dict(
