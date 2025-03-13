@@ -23,6 +23,9 @@ source venv/bin/activate
 
 # Install the required packages
 pip install -r requirements.txt
+
+# To create a new Jupyter Kernel specifically for this environment, execute the following command:
+python3 -m ipykernel install --user --name avail-fusion-model --display-name "Avail Fusion Crypto Econ Simulation"
 ```
 
 
