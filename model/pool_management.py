@@ -225,6 +225,27 @@ class PoolManager:
         
         return pool_type in self._paused_deposits
     
+    def mark_pool_zero_yield(self, pool_type: str):
+        """
+        Mark a pool as having zero yield due to budget depletion
+        
+        Args:
+            pool_type: Type of pool to mark as zero yield
+        """
+        self._zero_yield_pools.add(pool_type)
+        print(f"Pool {pool_type} marked as zero yield due to budget depletion")
+    
+    def unmark_pool_zero_yield(self, pool_type: str):
+        """
+        Remove a pool from the zero yield list
+        
+        Args:
+            pool_type: Type of pool to unmark
+        """
+        if pool_type in self._zero_yield_pools:
+            self._zero_yield_pools.remove(pool_type)
+            print(f"Pool {pool_type} no longer has zero yield")
+    
     def get_pool_rewards(self, pool_type: str, required_amount: float) -> float:
         """
         Get rewards allocation for a pool, limited by available budget.
@@ -241,8 +262,18 @@ class PoolManager:
             
         available_budget = self._allocated_budgets.get(pool_type, 0.0)
         
-        # Cap rewards at available budget
-        actual_rewards = min(required_amount, available_budget)
+        # Check if budget is depleted or insufficient
+        if available_budget <= 0 or available_budget < required_amount * 0.1:
+            # Mark the pool as having zero yield if budget is severely depleted
+            self.mark_pool_zero_yield(pool_type)
+            actual_rewards = 0.0
+        else:
+            # If pool was previously marked as zero yield but now has budget, unmark it
+            if pool_type in self._zero_yield_pools:
+                self.unmark_pool_zero_yield(pool_type)
+            
+            # Cap rewards at available budget
+            actual_rewards = min(required_amount, available_budget)
         
         # Update remaining budget
         self._allocated_budgets[pool_type] -= actual_rewards
