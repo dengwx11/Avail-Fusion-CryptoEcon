@@ -28,6 +28,7 @@ class AgentStake:
     assets: Dict[str, AssetAllocation]  # Asset symbol to allocation mapping
     curr_annual_rewards_avl: float = 0.0  # Current annual rewards in AVL tokens
     accu_rewards_avl: float = 0.0  # Accumulated rewards in AVL tokens
+    restake_pct: float = 0.0  # Percentage of rewards to restake (0.0-1.0)
 
     def __post_init__(self):
         self._update_percentages()
@@ -68,10 +69,51 @@ class AgentStake:
 
 
     def add_rewards(self, avl_amount: float):
-        """Add AVL token rewards to the agent"""
-        timesteps_per_year = 365 / DELTA_TIME
+        """Add AVL token rewards to the agent
+        
+        Args:
+            avl_amount: Annual rewards in AVL tokens
+            
+        The method sets the current annual rewards and also accumulates
+        the non-restaked portion into accu_rewards_avl.
+        """
+        # Update the current annual rewards amount
         self.curr_annual_rewards_avl = avl_amount
+        
+        # Convert to daily rewards for this timestep
+        timesteps_per_year = 365 / DELTA_TIME
+        
+        # Add non-restaked rewards to accumulated rewards
         self.accu_rewards_avl += avl_amount/timesteps_per_year
+
+    def restake_accumulated_rewards(self) -> float:
+        """
+        Restake rewards based on restake_pct.
+        Returns the amount of AVL tokens that were restaked.
+        
+        If restake_pct > 0, current annual rewards are converted to daily rewards
+        and that portion is automatically restaked.
+        """
+        # Convert annual rewards to daily rewards for this timestep
+        timesteps_per_year = 365 / DELTA_TIME
+        daily_rewards = self.curr_annual_rewards_avl / timesteps_per_year
+        
+        # Calculate amount to restake from daily rewards
+        amount_to_restake = daily_rewards * self.restake_pct
+        
+        if amount_to_restake <= 0:
+            return 0.0
+            
+        # Add restaked amount to AVL balance
+        self.assets['AVL'].balance += amount_to_restake
+        
+        # We don't subtract from accu_rewards_avl since we're taking directly from the daily flow
+        # The remaining rewards are still accumulated via add_rewards method
+        
+        # Update asset percentages
+        self._update_percentages()
+        
+        return amount_to_restake
 
     @property
     def annual_rewards_usd(self) -> float:
@@ -90,9 +132,10 @@ class AgentStake:
         total_tvl: float,
         avl_price: float = 0.1,
         eth_price: float = 3000,
-        btc_price: float = 30000
+        btc_price: float = 30000,
+        restake_pcts: Dict[str, float] = None
     ) -> Dict[str, 'AgentStake']:
-        """Class method to create maxi agents based on target composition"""
+        """Class method to create maxi agents based on target composition with restaking"""
         # Calculate required balances
         balances = cls.calculate_required_balances(
             target_composition,
@@ -102,22 +145,30 @@ class AgentStake:
             btc_price
         )
         
+        # Default restake percentages if not provided
+        if restake_pcts is None:
+            restake_pcts = {
+                'avl_maxi': 1,  # 80% restake for AVL maxis
+                'eth_maxi': 1,  # 30% restake for ETH maxis
+                'btc_maxi': 1   # 20% restake for BTC maxis
+            }
+        
         return {
             'avl_maxi': cls(assets={
                 'AVL': AssetAllocation(pct=1.0, balance=balances['AVL'], price=avl_price),
                 'ETH': AssetAllocation(pct=0.0, balance=0, price=eth_price),
                 'BTC': AssetAllocation(pct=0.0, balance=0, price=btc_price)
-            }),
+            }, restake_pct=restake_pcts.get('avl_maxi', 0.8)),
             'eth_maxi': cls(assets={
                 'AVL': AssetAllocation(pct=0.0, balance=0, price=avl_price),
                 'ETH': AssetAllocation(pct=1.0, balance=balances['ETH'], price=eth_price),
                 'BTC': AssetAllocation(pct=0.0, balance=0, price=btc_price)
-            }),
+            }, restake_pct=restake_pcts.get('eth_maxi', 0.3)),
             'btc_maxi': cls(assets={
                 'AVL': AssetAllocation(pct=0.0, balance=0, price=avl_price),
                 'ETH': AssetAllocation(pct=0.0, balance=0, price=eth_price),
                 'BTC': AssetAllocation(pct=1.0, balance=balances['BTC'], price=btc_price)
-            })
+            }, restake_pct=restake_pcts.get('btc_maxi', 0.2))
         }
 
     @staticmethod

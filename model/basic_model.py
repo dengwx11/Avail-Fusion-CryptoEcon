@@ -20,7 +20,7 @@ def policy_update_token_prices(params, step, h, s):
     agents = s['agents'].copy()
     print("###########################")
     print("timestep", s["timestep"])
-    if s["timestep"] % 7 == 0: # update token prices every 7 timesteps
+    if s["timestep"] % 1 == 0: # update token prices every 7 timesteps
         for asset in ['AVL', 'ETH', 'BTC']:
             # Get the new price for the current asset from its price process
             new_price = locals()[f"{asset.lower()}_price_process"](s["timestep"])
@@ -84,36 +84,83 @@ def policy_tune_rewards_allocation(params, step, h, s):
         
         print(f"{'$'*80}\n")
     
-    
-    # Calculate required rewards based on target yields
+    # Calculate rewards based on asset-specific yields
     timesteps_per_year = 365 / DELTA_TIME
     avl_price = agents['avl_maxi'].assets['AVL'].price
     
-    required_rewards = {}
-    for asset, yield_pct in target_yields.items():
-        # Skip assets not yet activated (BTC before activation day)
-        if asset == 'BTC' and (timestep < btc_activation or 'BTC' not in pool_manager.pools):
-            continue
-            
-        agent = agents[f"{asset.lower()}_maxi"]
-        annual_rewards_usd = agent.total_tvl * yield_pct
-        annual_rewards_avl = annual_rewards_usd / avl_price
-        
-        # Store required rewards
-        required_rewards[asset] = annual_rewards_avl
+    # Debug log
+    print(f"\n[REWARDS] Day {timestep} - Asset-specific Yield Calculations:")
     
-    # Allocate rewards with pool manager constraints
-    for asset, amount in required_rewards.items():
-        agent_key = f"{asset.lower()}_maxi"
-        # Get daily rewards with budget constraints
-        daily_amount = amount / timesteps_per_year
-        actual_rewards = pool_manager.get_pool_rewards(asset, daily_amount)
+    # Rewards calculation for each pool type
+    required_rewards = {}
+    for asset_type in ['AVL', 'ETH', 'BTC']:
+        # Skip assets not yet activated (BTC before activation day)
+        if asset_type == 'BTC' and (timestep < btc_activation or 'BTC' not in pool_manager.pools):
+            continue
         
-        # Apply rewards to agent
-        if actual_rewards > 0:
-            agents[agent_key].add_rewards(actual_rewards * timesteps_per_year)
-        else:
-            agents[agent_key].add_rewards(0)
+        # Skip rewards calculation if asset's yield is not defined
+        if asset_type not in target_yields:
+            continue
+        
+        yield_pct = target_yields[asset_type]
+        annual_rewards_avl = 0.0
+        
+        # For each agent, calculate rewards for this asset type
+        for agent_name, agent in agents.items():
+            # Only calculate rewards for this asset if agent holds it
+            if asset_type in agent.assets and agent.assets[asset_type].balance > 0:
+                asset_balance = agent.assets[asset_type].balance
+                asset_price = agent.assets[asset_type].price
+                asset_tvl = asset_balance * asset_price
+                
+                # If agent holds this asset, calculate rewards
+                asset_annual_rewards_usd = asset_tvl * yield_pct
+                asset_annual_rewards_avl = asset_annual_rewards_usd / avl_price
+                annual_rewards_avl += asset_annual_rewards_avl
+                
+                print(f"  {agent_name}: {asset_type} TVL: ${asset_tvl:,.2f}, "
+                      f"Yield: {yield_pct*100:.2f}%, "
+                      f"Rewards: {asset_annual_rewards_avl:,.2f} AVL/year")
+        
+        # Store the total required rewards for this asset type
+        required_rewards[asset_type] = annual_rewards_avl
+    
+    # Allocate rewards to each agent with pool manager constraints
+    agent_rewards = {agent_name: 0.0 for agent_name in agents.keys()}
+    
+    for asset_type, total_asset_rewards in required_rewards.items():
+        # Get daily rewards with budget constraints
+        daily_amount = total_asset_rewards / timesteps_per_year
+        actual_daily_rewards = pool_manager.get_pool_rewards(asset_type, daily_amount)
+        actual_annual_rewards = actual_daily_rewards * timesteps_per_year
+        
+        # If no rewards, skip distribution
+        if actual_annual_rewards <= 0:
+            continue
+        
+        # Calculate what proportion of rewards each agent should get
+        total_asset_tvl = sum(
+            agent.assets[asset_type].tvl for agent in agents.values()
+            if asset_type in agent.assets and agent.assets[asset_type].balance > 0
+        )
+        
+        if total_asset_tvl <= 0:
+            continue
+        
+        # Distribute rewards proportionally to each agent based on their holdings
+        for agent_name, agent in agents.items():
+            if asset_type in agent.assets and agent.assets[asset_type].balance > 0:
+                agent_asset_tvl = agent.assets[asset_type].tvl
+                agent_share = agent_asset_tvl / total_asset_tvl
+                agent_asset_rewards = actual_annual_rewards * agent_share
+                agent_rewards[agent_name] += agent_asset_rewards
+    
+    # Finally, apply accumulated rewards to each agent
+    print("\n[REWARDS] Final agent rewards distribution:")
+    for agent_name, rewards_amount in agent_rewards.items():
+        if rewards_amount > 0:
+            agents[agent_name].add_rewards(rewards_amount)
+            print(f"  {agent_name}: {rewards_amount:,.2f} AVL/year")
     
     # Log pool manager state for this timestep
     if pool_manager and timestep % 1 == 0:  # Log every timestep (adjust frequency if needed)
@@ -144,6 +191,13 @@ def log_pool_manager_state(timestep, pool_manager, agents):
     print(f"  Unallocated Budget:   {budget_summary['unallocated_budget']:,.2f} AVL")
     print(f"  Utilization:          {budget_summary['budget_utilization_pct']:.2f}%")
     
+    # Spent budget per pool
+    spent_budget_per_pool = budget_summary.get('spent_budget_per_pool', {})
+    if spent_budget_per_pool:
+        print(f"\nSPENT BUDGET PER POOL:")
+        for pool, spent in sorted(spent_budget_per_pool.items()):
+            print(f"  {pool}: {spent:,.2f} AVL")
+    
     # Pool allocation information
     print(f"\nPOOL ALLOCATIONS:")
     remaining_budget = pool_manager.get_remaining_budget()
@@ -169,6 +223,7 @@ def log_pool_manager_state(timestep, pool_manager, agents):
         print(f"  {pool}:")
         print(f"    Status:           {status}{' (CAP REACHED)' if cap_paused else ''}")
         print(f"    Remaining Budget: {remaining_budget[pool]:,.2f} AVL")
+        print(f"    Spent Budget:     {spent_budget_per_pool.get(pool, 0):,.2f} AVL")
         print(f"    Current TVL:      ${agent_tvl:,.2f}")
         print(f"    Current Yield:    {agent_yield:.2f}%")
         print(f"    Max Cap:          ${cap_display}")
@@ -224,11 +279,17 @@ def policy_update_inflation_and_rewards(params, step, h, s):
 
 
 def policy_calc_security_shares(params, step, h, s):
-    """Calculate security shares and allocate rewards using agent-based structure"""
+    """
+    Calculate security shares and allocate rewards using agent-based structure
+    
+    Accounts for all tokens across all agents, including those
+    accumulated through restaking, when calculating staking ratios.
+    """
     agents = s['agents'].copy()
     pool_manager = s.get('pool_manager')
-    total_security = 0
-    staking_ratio_fusion = {}
+    
+    # Dictionary to store TVL for each asset
+    tvl = {}
     
     # Get active pools from pool manager
     if pool_manager:
@@ -236,24 +297,39 @@ def policy_calc_security_shares(params, step, h, s):
                        if pool not in pool_manager._deleted_pools]
     else:
         active_pools = []
-        
-    # Calculate total security from active pools
-    for asset in active_pools:
-        agent_key = f'{asset.lower()}_maxi'
-        if agent_key in agents:
-            total_security += agents[agent_key].total_tvl
-            
+    
+    # Make sure we're always tracking AVL TVL, even if not in active pools
+    all_assets = set(active_pools)
+    all_assets.add('AVL')  # Always include AVL
+    
+    # Calculate TVL for each asset type by summing across all agents
+    for asset in all_assets:
+        tvl[asset] = 0
+        for agent_name, agent in agents.items():
+            if asset in agent.assets:
+                # Get asset balance and price for this agent
+                asset_balance = agent.assets[asset].balance
+                asset_price = agent.assets[asset].price
+                # Add to asset's TVL
+                tvl[asset] += asset_balance * asset_price
+    
+    # Calculate total security as the sum of all TVLs from active pools only
+    total_security = sum(tvl[asset] for asset in active_pools if asset in tvl)
+    
     # Calculate staking ratio for each active pool
+    staking_ratio_fusion = {}
     for asset in active_pools:
-        agent_key = f'{asset.lower()}_maxi'
-        if agent_key in agents:
-            staking_ratio_fusion[asset] = (agents[agent_key].total_tvl / total_security 
-                                         if total_security > 0 else 0.0)
+        staking_ratio_fusion[asset] = (tvl[asset] / total_security 
+                                     if total_security > 0 else 0.0)
+    
+    # Calculate staking ratio using total AVL value
+    staking_ratio_all = tvl['AVL'] / s["total_fdv"] if s["total_fdv"] > 0 else 0
     
     return {
         "total_security": total_security,
-        "staking_ratio_all": agents['avl_maxi'].total_tvl / s["total_fdv"] + params["native_staking_ratio"],
-        "staking_ratio_fusion": staking_ratio_fusion
+        "staking_ratio_all": staking_ratio_all + params["native_staking_ratio"],
+        "staking_ratio_fusion": staking_ratio_fusion,
+        "tvl": tvl
     }
 
 

@@ -1,3 +1,28 @@
+"""
+Visualization package for the Avail Fusion simulation.
+
+This package provides visualization functions for analyzing simulation results.
+"""
+
+# Core visualization functions will be imported from the main module
+# when it's available in the codebase
+
+# Import comparison plots (these are our new extensions)
+try:
+    from .comparison_plots import (
+        plot_token_prices_comparison,
+        plot_security_comparison,
+        plot_yields_comparison,
+        plot_staking_inflation_comparison,
+        plot_tvl_asset_distribution,
+        plot_asset_tvl_comparison,
+        plot_rewards_comparison,
+        plot_comparison_dashboard
+    )
+except ImportError:
+    # The comparison plots module might not be available yet
+    pass
+
 import itertools
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
@@ -181,15 +206,26 @@ def plot_security_pct(df):
 def plot_avg_overall_yield(df):
     fig = go.Figure()
 
-    # AVL Security Percentage
+    # Regular yield (dotted line)
     fig.add_trace(
         go.Scatter(
             x=df["timestep"],
             y=df["avg_yield"],
             name="Avg overall yield %",
-            line=dict(color='#1f77b4', dash='dot'),  # Blue color
+            line=dict(color='#1f77b4', dash='dot'),  # Blue color with dotted line
         )
     )
+    
+    # Add compounding yield (solid line of same color) if it exists in the dataframe
+    if "compounding_avg_yield" in df.columns:
+        fig.add_trace(
+            go.Scatter(
+                x=df["timestep"],
+                y=df["compounding_avg_yield"],
+                name="Avg compounding yield %",
+                line=dict(color='#1f77b4', dash='solid'),  # Same blue color with solid line
+            )
+        )
 
     fig.update_layout(
         title={
@@ -199,7 +235,7 @@ def plot_avg_overall_yield(df):
             'xanchor': 'center',
             'yanchor': 'top'},
         xaxis_title="Timestep",
-        yaxis_title="Avg overall yield %",
+        yaxis_title="Avg basic yield %",
         yaxis=dict(
             range=[0, 20],  # Set y-axis range from 0 to 100%
         ),
@@ -231,8 +267,11 @@ def plot_yield_pct(df):
     for yield_dict in df["yield_pcts"]:
         all_agent_keys.update(yield_dict.keys())
     agent_keys = sorted(list(all_agent_keys))
+    
+    # Create two figures, one for basic yields and one for compounding yields
+    has_compounding = "compounding_yield_pcts" in df.columns
 
-    # Plot yield curve for each agent
+    # Plot standard yield curve for each agent (dotted lines)
     for i, agent_key in enumerate(agent_keys):
         # Extract yields for this agent across all timesteps
         yields = []
@@ -240,18 +279,50 @@ def plot_yield_pct(df):
             # Use 0 as default if agent not present at this timestep
             yields.append(yield_dict.get(agent_key, 0))
         
+        # Use the same color for each agent, but with dotted line for regular yield
+        agent_color = cadlabs_colorway_sequence[i]
+        
         fig.add_trace(
             go.Scatter(
                 x=df["timestep"],
                 y=yields,
-                name=f"Yield % {agent_key} ", 
+                name=f"Basic: {agent_key}", 
+                legendgroup="Basic",
+                legendgrouptitle_text="Basic Yields" if i == 0 else None,
                 line=dict(
                     width=2, 
                     dash='dot',
-                    color=cadlabs_colorway_sequence[i]  # Use consistent colors
+                    color=agent_color
                 )
             )
         )
+    
+    # Plot compounding yield curve for each agent (solid lines) if available
+    if has_compounding:
+        for i, agent_key in enumerate(agent_keys):
+            # Extract compounding yields for this agent across all timesteps
+            compounding_yields = []
+            for compounding_yield_dict in df["compounding_yield_pcts"]:
+                # Use 0 as default if agent not present at this timestep
+                compounding_yields.append(compounding_yield_dict.get(agent_key, 0))
+            
+            # Use the same color for each agent, but with solid line for compounding yield
+            agent_color = cadlabs_colorway_sequence[i]
+            
+            fig.add_trace(
+                go.Scatter(
+                    x=df["timestep"],
+                    y=compounding_yields,
+                    name=f"Compound: {agent_key}", 
+                    legendgroup="Compound",
+                    legendgrouptitle_text="Compounding Yields" if i == 0 else None,
+                    line=dict(
+                        width=2, 
+                        dash='solid',
+                        color=agent_color
+                    )
+                )
+            )
 
     fig.update_layout(
         title={
@@ -266,11 +337,15 @@ def plot_yield_pct(df):
             range=[0, 30],  # Set y-axis range from 0 to 100%
         ),
         legend=dict(
-            orientation="h",
-            yanchor="bottom",
-            y=-0.5,
-            xanchor="center",
-            x=0.5
+            orientation="v",
+            groupclick="toggleitem",
+            traceorder="grouped",
+            yanchor="top",
+            y=1,
+            xanchor="left",
+            x=1.05,
+            bordercolor="LightGrey",
+            borderwidth=1
         ),
         hovermode="x unified",
         template="plotly_white",
@@ -280,7 +355,9 @@ def plot_yield_pct(df):
             color="black"
         ),
         plot_bgcolor='rgba(255, 255, 255, 1)', 
-        paper_bgcolor='rgba(255, 255, 255, 1)'
+        paper_bgcolor='rgba(255, 255, 255, 1)',
+        # Add more margin on the right for the legend
+        margin=dict(r=150)
     )
 
     return fig
@@ -353,7 +430,7 @@ def plot_staking_ratio_inflation_rate(df, assets=['AVL', 'ETH', 'BTC']):
         legend=dict(
             orientation="h",
             yanchor="bottom",
-            y=-1,
+            y=-1.3,
             xanchor="center",
             x=0.5
         ),
@@ -415,4 +492,174 @@ def plot_total_security(df):
         paper_bgcolor='rgba(255, 255, 255, 1)'
     )
 
+    return fig
+
+def plot_asset_tvl_stacked(df):
+    """
+    Creates a stacked area plot of TVL by asset type over time.
+    
+    Args:
+        df: DataFrame containing simulation results with 'tvl' and 'timestep' columns
+        
+    Returns:
+        Plotly figure object with stacked area chart
+    """
+    fig = go.Figure()
+    
+    # Get all unique asset types across all timesteps
+    all_assets = set()
+    for tvl_dict in df["tvl"]:
+        if tvl_dict:  # Check if tvl_dict is not empty
+            all_assets.update(tvl_dict.keys())
+    asset_types = sorted(list(all_assets))
+    
+    # Create a stacked area plot for each asset
+    for i, asset in enumerate(asset_types):
+        # Extract TVL for this asset across all timesteps
+        tvl_values = []
+        for tvl_dict in df["tvl"]:
+            # Use 0 as default if asset not present at this timestep
+            tvl_values.append(tvl_dict.get(asset, 0) if tvl_dict else 0)
+        
+        # Use consistent colors across visualizations
+        asset_color = cadlabs_colorway_sequence[i % len(cadlabs_colorway_sequence)]
+        
+        fig.add_trace(
+            go.Scatter(
+                x=df["timestep"],
+                y=tvl_values,
+                name=f"{asset} TVL",
+                line=dict(width=0, color=asset_color),
+                mode='lines',
+                stackgroup='one',  # This creates the stacked area effect
+                fillcolor=asset_color
+            )
+        )
+    
+    fig.update_layout(
+        title={
+            'text': "Total Value Locked (TVL) by Asset",
+            'y':0.9,
+            'x':0.5,
+            'xanchor': 'center',
+            'yanchor': 'top'
+        },
+        xaxis_title="Timestep",
+        yaxis_title="TVL (USD)",
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=-0.6,
+            xanchor="center",
+            x=0.5
+        ),
+        hovermode="x unified",
+        template="plotly_white",
+        font=dict(
+            family="Arial",
+            size=18,
+            color="black"
+        ),
+        plot_bgcolor='rgba(255, 255, 255, 1)', 
+        paper_bgcolor='rgba(255, 255, 255, 1)'
+    )
+    
+    return fig
+
+def plot_pool_rewards_spent(df):
+    """
+    Plot the accumulated rewards spent for each pool over time.
+    
+    Args:
+        df: DataFrame containing simulation results with 'pool_manager' and 'timestep' columns
+        
+    Returns:
+        Plotly figure object showing accumulated rewards spent per pool
+    """
+    fig = go.Figure()
+    
+    # Extract pool data from all timesteps
+    pool_rewards_data = {}
+    
+    # First, identify all pools that exist at any point
+    all_pools = set()
+    for _, row in df.iterrows():
+        pool_manager = row.get('pool_manager')
+        if pool_manager and hasattr(pool_manager, '_spent_budget_per_pool'):
+            # All pools that have spent budget tracking
+            all_pools.update(pool_manager._spent_budget_per_pool.keys())
+    
+    # Initialize data structure for each pool
+    for pool in all_pools:
+        pool_rewards_data[pool] = []
+    
+    # For each timestep, extract the spent budget for each pool
+    timesteps = df['timestep'].tolist()
+    
+    for i, row in df.iterrows():
+        pool_manager = row.get('pool_manager')
+        timestep = row['timestep']
+        
+        # If we have pool manager data
+        if pool_manager and hasattr(pool_manager, '_spent_budget_per_pool'):
+            # Get the spent budget per pool directly
+            spent_budget_per_pool = pool_manager._spent_budget_per_pool
+            
+            # Add this timestep's data to each pool's list
+            for pool in all_pools:
+                pool_rewards_data[pool].append(spent_budget_per_pool.get(pool, 0))
+        else:
+            # No pool manager data for this timestep, add zeros
+            for pool in all_pools:
+                pool_rewards_data[pool].append(0)
+    
+    # Create a line plot for each pool
+    for i, (pool, values) in enumerate(pool_rewards_data.items()):
+        # Ensure we have the same number of values as timesteps
+        if len(values) < len(timesteps):
+            values.extend([values[-1] if values else 0] * (len(timesteps) - len(values)))
+        elif len(values) > len(timesteps):
+            values = values[:len(timesteps)]
+        
+        # Use consistent colors across visualizations
+        pool_color = cadlabs_colorway_sequence[i % len(cadlabs_colorway_sequence)]
+        
+        fig.add_trace(
+            go.Scatter(
+                x=timesteps,
+                y=values,
+                name=f"{pool} Rewards Spent",
+                line=dict(width=2, color=pool_color),
+                mode='lines'
+            )
+        )
+    
+    fig.update_layout(
+        title={
+            'text': "Accumulated Rewards Spent by Pool",
+            'y':0.9,
+            'x':0.5,
+            'xanchor': 'center',
+            'yanchor': 'top'
+        },
+        xaxis_title="Timestep",
+        yaxis_title="Accumulated Rewards (AVL)",
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=-0.6,
+            xanchor="center",
+            x=0.5
+        ),
+        hovermode="x unified",
+        template="plotly_white",
+        font=dict(
+            family="Arial",
+            size=18,
+            color="black"
+        ),
+        plot_bgcolor='rgba(255, 255, 255, 1)', 
+        paper_bgcolor='rgba(255, 255, 255, 1)'
+    )
+    
     return fig

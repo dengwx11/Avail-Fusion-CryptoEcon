@@ -31,6 +31,7 @@ psub = [
                 "total_security": utils.generic_state_updater("total_security"),
                 "staking_ratio_all": utils.generic_state_updater("staking_ratio_all"),  
                 "staking_ratio_fusion": utils.generic_state_updater("staking_ratio_fusion"),
+                "tvl": utils.generic_state_updater("tvl"),
             }
     }, 
     # {
@@ -78,6 +79,16 @@ psub = [
             "target_yields": utils.generic_state_updater("target_yields"),
             "pool_manager": utils.generic_state_updater("pool_manager"),
             "agents": utils.generic_state_updater("agents"),
+        }
+    },
+    {
+        "policies": {
+            "action": yield_apy.policy_handle_rewards_restaking
+        },
+        "variables": {
+            "agents": utils.generic_state_updater("agents"),
+            "compounding_yield_pcts": utils.generic_state_updater("compounding_yield_pcts"),
+            "compounding_avg_yield": utils.generic_state_updater("compounding_avg_yield"),
         }
     },
     {

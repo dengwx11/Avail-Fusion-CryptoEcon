@@ -37,3 +37,4 @@ def calculate_reward_allocation(
         "total_inflation_rewards_in_avl": total_inflation_rewards_in_avl,
         "total_inflation_rewards_usd": total_inflation_rewards_usd,
     }
+

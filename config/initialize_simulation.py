@@ -8,25 +8,34 @@ def create_maxi_agents(
     btc_balance: float = 0.1,  # ~3000 USD at 30000 price
     eth_price: float = 3000,
     avl_price: float = 0.1,
-    btc_price: float = 30000
+    btc_price: float = 30000,
+    restake_pcts: Dict[str, float] = None
 ) -> Dict[str, AgentStake]:
-    """Create named agents with 100% allocation to one asset"""
+    """Create named agents with 100% allocation to one asset and restaking config"""
+    # Default restake percentages if not provided
+    if restake_pcts is None:
+        restake_pcts = {
+            'avl_maxi': 1,  # 80% restake for AVL maxis
+            'eth_maxi': 1,  # 40% restake for ETH maxis 
+            'btc_maxi': 1   # 20% restake for BTC maxis
+        }
+    
     return {
         'avl_maxi': AgentStake(assets={
             'AVL': AssetAllocation(pct=1.0, balance=avl_balance, price=avl_price),
             'ETH': AssetAllocation(pct=0.0, balance=0, price=eth_price),
             'BTC': AssetAllocation(pct=0.0, balance=0, price=btc_price)
-        }),
+        }, restake_pct=restake_pcts.get('avl_maxi', 1)),
         'eth_maxi': AgentStake(assets={
             'AVL': AssetAllocation(pct=0.0, balance=0, price=avl_price),
             'ETH': AssetAllocation(pct=1.0, balance=eth_balance, price=eth_price),
             'BTC': AssetAllocation(pct=0.0, balance=0, price=btc_price)
-        }),
+        }, restake_pct=restake_pcts.get('eth_maxi', 1)),
         'btc_maxi': AgentStake(assets={
             'AVL': AssetAllocation(pct=0.0, balance=0, price=avl_price),
             'ETH': AssetAllocation(pct=0.0, balance=0, price=eth_price),
             'BTC': AssetAllocation(pct=1.0, balance=btc_balance, price=btc_price)
-        })
+        }, restake_pct=restake_pcts.get('btc_maxi', 1))
     }
 
 def calculate_agent_composition(agents: List[AgentStake]) -> Dict[str, float]:
@@ -82,23 +91,32 @@ def calculate_required_balances(
         'BTC': btc_usd / btc_price if btc_price > 0 else 0
     }
 
-def initialize_state(init_total_fdv, constants, rewards_result, params, seed):
+def initialize_state(init_total_fdv, constants, rewards_result, params, restaking, seed):
     """Initialize simulation state with agents and pool manager"""
     # ... [existing initialization code] ...
     
-    # Create initial agents
-    agents = AgentStake.create_maxi_agents(
-        target_composition={
-            'AVL': 0.7,
-            'ETH': 0.3,
-            'BTC': 0.0  # No BTC initially
-        },
-        total_tvl=1
+    # Get restake configuration from parameters
+    restake_config = params.get('restake_config', {
+        'avl_maxi': restaking,
+        'eth_maxi': restaking,
+        'btc_maxi': restaking
+    })
+    restake_config = restake_config[0] if isinstance(restake_config, list) else restake_config
+    
+    # Create initial agents with restaking config
+    agents = create_maxi_agents(
+        eth_balance=300,  # Start with some ETH (~$900,000 at $3000)
+        avl_balance=9e6,  # Start with some AVL (~$900,000 at $0.1)
+        btc_balance=0,    # No BTC initially
+        eth_price=3000,
+        avl_price=0.1,
+        btc_price=30000,
+        restake_pcts=restake_config
     )
     
     # Initialize pool manager
     pool_manager = PoolManager(
-        total_budget=30e6
+        total_budget=30e9
     )
     
     # Set initial pool configurations from params
@@ -131,8 +149,8 @@ def initialize_state(init_total_fdv, constants, rewards_result, params, seed):
     
     # Allocate initial budget - direct allocation instead of percentages
     initial_allocations = {
-        'AVL': 21e6,  # 70% of 30M
-        'ETH': 9e6,   # 30% of 30M
+        'AVL': 21e9,  # 70% of 30M
+        'ETH': 9e9,   # 30% of 30M
         # BTC removed - will be allocated on activation day
     }
     
@@ -153,6 +171,8 @@ def initialize_state(init_total_fdv, constants, rewards_result, params, seed):
 
         # security shares
         'total_security': 0,
+        'tvl': {
+        },
         'total_fdv': init_total_fdv,
 
         # staking ratios
@@ -174,6 +194,8 @@ def initialize_state(init_total_fdv, constants, rewards_result, params, seed):
             'btc_maxi': 0
         },      
         "avg_yield": 0,
+        "compounding_yield_pcts": {},
+        "compounding_avg_yield": 0,
         
         
     }

@@ -29,31 +29,19 @@ class FusionParams:
 
     ### ADMIN: fusion pallete ###
     target_yields: List[Dict] = default([
-        {1: {"AVL": 0.15, "ETH": 0.035, "BTC": 0}, 50: {"AVL": 0.15, "ETH": 0.035, "BTC": 0},
-         180: {"AVL": 0.15, "ETH": 0.035, "BTC": 0.02}}  # BTC target yield
+        {1: {"AVL": 0.15, "ETH": 0.035, "BTC": 0}, 
+         180: {"AVL": 0.15, "ETH": 0.035, "BTC": 0.05}}  # BTC target yield
     ])
     # Security budget replenishment schedule
     # Dictionary mapping timestep to pool-specific token allocations
     security_budget_replenishment: List[Dict] = default([
         {
-            30: {'AVL': 4e6, 'ETH': 1e7},
-            60: {'AVL': 10e6, 'ETH': 2e7},
-            90: {'AVL': 3e6, 'ETH': 2e7},
-            120: {'AVL': 13e6, 'ETH': 2e7},
-            150: {'AVL': 13e6, 'ETH': 12e6},
-            180: {'AVL': 15e6, 'ETH': 2e6, 'BTC': 9e7},
-            210: {'AVL': 5e6, 'ETH': 12e6, 'BTC': 3e6},
-            240: {'AVL': 25e6, 'ETH': 2e6, 'BTC': 3e6},
-            270: {'AVL': 15e6, 'ETH': 12e6, 'BTC': 3e6},
-            300: {'AVL': 38e6, 'ETH': 2e6, 'BTC': 3e6},
-            330: {'AVL': 18e6, 'ETH': 12e6, 'BTC': 3e6},
-            360: {'AVL': 38e6, 'ETH': 2e6, 'BTC': 3e6},
-            390: {'AVL': 18e6, 'ETH': 12e6, 'BTC': 3e6},
-            420: {'AVL': 38e6, 'ETH': 2e6, 'BTC': 3e6},
-            450: {'AVL': 18e6, 'ETH': 12e6, 'BTC': 3e6},
-            480: {'AVL': 28e6, 'ETH': 2e6, 'BTC': 3e6},
-            510: {'AVL': 38e6, 'ETH': 12e6, 'BTC': 3e6},
-            540: {'AVL': 38e6, 'ETH': 2e6, 'BTC': 3e6}   
+            # 30: {'AVL': 4e6, 'ETH': 1e6},
+            # 60: {'AVL': 3e6, 'ETH': 2e6},
+            # 90: {'AVL': 3e6, 'ETH': 2e6},
+            # 120: {'AVL': 3e6, 'ETH': 2e6},
+            # 150: {'AVL': 3e6, 'ETH': 2e6},
+            180: {'AVL': 0, 'ETH': 0, 'BTC': 3e9}
         }
     ])
     # Admin actions to pause deposits or delete pools
@@ -69,7 +57,16 @@ class FusionParams:
     #     {100: ['ETH']} 
     # ]) # APY = 0%
 
-
+    ### Restaking configuration ###
+    # Default restaking percentages for each agent type
+    restake_config: List[Dict] = default([
+        {
+            'avl_maxi': 1,  # 90% of rewards restaked
+            'eth_maxi': 1,  # 50% of rewards restaked
+            'btc_maxi': 1   # 30% of rewards restaked
+        }
+    ])
+    
     ### Inflation function parameters (Polkadot) ###
     inflation_decay: List[float] = default([0.05])
     target_staking_rate: List[float] = default([0.5])
@@ -94,13 +91,13 @@ class FusionParams:
         'max_cap': float('inf')
     }])
 
-    # Initial pool configurations during cold start
+    # Initial pool configurations
     initial_pool_configs: List[Dict] = default([{
         'AVL': {
             'base_deposit': 5e4,
             'max_extra_deposit': 5e5,
             'deposit_k': 5.0,
-            'apy_threshold': 0.15,
+            'apy_threshold': 0.10,
             'base_withdrawal': 5e3,
             'max_extra_withdrawal': 3e5,
             'withdrawal_k': 7.0,
@@ -110,45 +107,11 @@ class FusionParams:
             'base_deposit': 3e4,
             'max_extra_deposit': 5e4,
             'deposit_k': 8.0,
-            'apy_threshold': 0.035,
+            'apy_threshold': 0.03,
             'base_withdrawal': 1e4,
             'max_extra_withdrawal': 3e4,
             'withdrawal_k': 10.0,
             'max_cap': 100e6 # in USD
-        }
-    }])
-    
-    # Post-cold-start pool configurations (applied after cold start period ends)
-    post_cold_start_pool_configs: List[Dict] = default([{
-        'AVL': {
-            'base_deposit': 2e4,  # Reduced base deposit after cold start
-            'max_extra_deposit': 3e5,  # Reduced max extra deposit
-            'deposit_k': 7.0,     # Higher sensitivity (steeper curve)
-            'apy_threshold': 0.12, # Adjusted APY threshold
-            'base_withdrawal': 2e4, # Increased base withdrawal
-            'max_extra_withdrawal': 4e5, # Increased max extra withdrawal
-            'withdrawal_k': 8.0,   # Higher sensitivity for withdrawals
-            'max_cap': float('inf')
-        },
-        'ETH': {
-            'base_deposit': 1.5e4, # Reduced base deposit
-            'max_extra_deposit': 3e4, # Reduced max extra deposit
-            'deposit_k': 10.0,     # Higher sensitivity
-            'apy_threshold': 0.03, # Slightly lower APY threshold
-            'base_withdrawal': 1.5e4, # Increased base withdrawal
-            'max_extra_withdrawal': 5e4, # Increased max extra withdrawal
-            'withdrawal_k': 12.0,   # Higher sensitivity for withdrawals
-            'max_cap': 120e6 # Slightly increased cap
-        },
-        'BTC': {
-            'base_deposit': 1e4,    # Adjusted from BTC pool config
-            'max_extra_deposit': 2e5, # Reduced from original
-            'deposit_k': 8.0,        # Increased sensitivity
-            'apy_threshold': 0.015,  # Lower APY threshold
-            'base_withdrawal': 1e4,   # Increased base withdrawal
-            'max_extra_withdrawal': 2.5e5, # Increased max withdrawal
-            'withdrawal_k': 10.0,     # Higher sensitivity
-            'max_cap': float('inf')
         }
     }])
 
