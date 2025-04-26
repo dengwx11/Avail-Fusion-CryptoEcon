@@ -291,6 +291,9 @@ def policy_calc_security_shares(params, step, h, s):
     # Dictionary to store TVL for each asset
     tvl = {}
     
+    # New: Dictionary to store actual token balances for each asset
+    staked_token_balances = {}
+    
     # Get active pools from pool manager
     if pool_manager:
         active_pools = [pool for pool in pool_manager._allocated_budgets.keys() 
@@ -302,16 +305,22 @@ def policy_calc_security_shares(params, step, h, s):
     all_assets = set(active_pools)
     all_assets.add('AVL')  # Always include AVL
     
-    # Calculate TVL for each asset type by summing across all agents
+    # Calculate TVL and token balances for each asset type by summing across all agents
     for asset in all_assets:
         tvl[asset] = 0
+        staked_token_balances[asset] = 0
+        
         for agent_name, agent in agents.items():
             if asset in agent.assets:
                 # Get asset balance and price for this agent
                 asset_balance = agent.assets[asset].balance
                 asset_price = agent.assets[asset].price
+                
                 # Add to asset's TVL
                 tvl[asset] += asset_balance * asset_price
+                
+                # Add to asset's token balance total
+                staked_token_balances[asset] += asset_balance
     
     # Calculate total security as the sum of all TVLs from active pools only
     total_security = sum(tvl[asset] for asset in active_pools if asset in tvl)
@@ -329,7 +338,8 @@ def policy_calc_security_shares(params, step, h, s):
         "total_security": total_security,
         "staking_ratio_all": staking_ratio_all + params["native_staking_ratio"],
         "staking_ratio_fusion": staking_ratio_fusion,
-        "tvl": tvl
+        "tvl": tvl,
+        "staked_token_balances": staked_token_balances  # New state variable
     }
 
 

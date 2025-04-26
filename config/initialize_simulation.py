@@ -157,8 +157,13 @@ def initialize_state(init_total_fdv, constants, rewards_result, params, restakin
     # Set allocated budgets directly
     for pool, amount in initial_allocations.items():
         pool_manager._allocated_budgets[pool] = amount
-
     
+    # Calculate initial token balances for staked assets
+    initial_staked_token_balances = {
+        'AVL': sum(agent.assets['AVL'].balance for agent in agents.values() if 'AVL' in agent.assets),
+        'ETH': sum(agent.assets['ETH'].balance for agent in agents.values() if 'ETH' in agent.assets),
+        'BTC': sum(agent.assets['BTC'].balance for agent in agents.values() if 'BTC' in agent.assets),
+    }
     
     # Return the initial state
     return {
@@ -173,6 +178,7 @@ def initialize_state(init_total_fdv, constants, rewards_result, params, restakin
         'total_security': 0,
         'tvl': {
         },
+        'staked_token_balances': initial_staked_token_balances,  # New state variable
         'total_fdv': init_total_fdv,
 
         # staking ratios
@@ -196,6 +202,4 @@ def initialize_state(init_total_fdv, constants, rewards_result, params, restakin
         "avg_yield": 0,
         "compounding_yield_pcts": {},
         "compounding_avg_yield": 0,
-        
-        
     }

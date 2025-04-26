@@ -32,6 +32,7 @@ psub = [
                 "staking_ratio_all": utils.generic_state_updater("staking_ratio_all"),  
                 "staking_ratio_fusion": utils.generic_state_updater("staking_ratio_fusion"),
                 "tvl": utils.generic_state_updater("tvl"),
+                "staked_token_balances": utils.generic_state_updater("staked_token_balances"),
             }
     }, 
     # {

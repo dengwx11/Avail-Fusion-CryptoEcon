@@ -663,3 +663,51 @@ def plot_pool_rewards_spent(df):
     )
     
     return fig
+
+def plot_staked_token_balances(df):
+    """
+    Plot the staked token balances for each asset over time.
+    
+    Args:
+        df: DataFrame containing simulation results
+    
+    Returns:
+        Plotly figure object
+    """
+    fig = go.Figure()
+    
+    # Extract assets from the first non-empty staked_token_balances entry
+    first_entry = next((x for x in df['staked_token_balances'] if x), {})
+    assets = list(first_entry.keys())
+    
+    # Add traces for each asset
+    for asset in assets:
+        balance_series = []
+        for _, row in df.iterrows():
+            # Get token balance for this asset and timestep
+            token_balances = row['staked_token_balances']
+            if token_balances and asset in token_balances:
+                balance_series.append(token_balances[asset])
+            else:
+                balance_series.append(0)
+        
+        # Add trace for this asset
+        fig.add_trace(
+            go.Scatter(
+                x=df["timestep"],
+                y=balance_series,
+                name=f"{asset} Staked Tokens",
+                mode="lines"
+            )
+        )
+    
+    # Update layout
+    fig.update_layout(
+        title="Staked Token Balances Over Time",
+        xaxis_title="Day",
+        yaxis_title="Token Amount",
+        hovermode="x unified",
+        template="plotly_white"
+    )
+    
+    return fig

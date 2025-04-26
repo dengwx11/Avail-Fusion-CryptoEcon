@@ -279,21 +279,22 @@ def plot_asset_tvl_comparison(scenarios: Dict[str, pd.DataFrame], asset: str = '
     plt.show()
 
 
-def plot_rewards_comparison(scenarios: Dict[str, pd.DataFrame], figsize=(12, 6)):
+def plot_rewards_comparison(scenarios: Dict[str, pd.DataFrame], figsize=(12, 10)):
     """
-    Plot accumulated rewards comparison across scenarios for each agent type.
+    Plot accumulated rewards comparison across scenarios for each agent type,
+    with both token amount and USD value.
     
     Args:
         scenarios: Dictionary mapping scenario names to DataFrames
         figsize: Figure size for the plot
     """
-    # Create figure with 3 subplots (one for each agent type)
-    fig, axes = plt.subplots(1, 3, figsize=figsize, sharey=False)
+    # Create figure with 6 subplots (2 rows, 3 columns)
+    fig, axes = plt.subplots(2, 3, figsize=figsize, sharex=True)
     agent_types = ['avl_maxi', 'eth_maxi', 'btc_maxi']
     
-    # For each agent type
+    # First row: AVL token accumulated rewards
     for i, agent_type in enumerate(agent_types):
-        ax = axes[i]
+        ax = axes[0, i]
         
         for scenario_name, df in scenarios.items():
             timesteps = df['timestep'].tolist()
@@ -310,16 +311,49 @@ def plot_rewards_comparison(scenarios: Dict[str, pd.DataFrame], figsize=(12, 6))
             # Plot this agent's rewards for this scenario
             ax.plot(timesteps, rewards, label=scenario_name)
         
-        ax.set_title(f"{agent_type.replace('_', ' ').title()} Rewards")
+        ax.set_title(f"{agent_type.replace('_', ' ').title()} Rewards (AVL)")
         ax.set_xlabel("Day")
         if i == 0:
             ax.set_ylabel("Accumulated AVL Rewards")
         ax.grid(True)
     
-    # Add a legend to the rightmost subplot
-    axes[-1].legend(loc='upper left', bbox_to_anchor=(1.05, 1))
+    # Second row: USD value of accumulated rewards
+    for i, agent_type in enumerate(agent_types):
+        ax = axes[1, i]
+        
+        for scenario_name, df in scenarios.items():
+            timesteps = df['timestep'].tolist()
+            rewards_usd = []
+            
+            # Extract rewards and multiply by AVL price for this agent across timesteps
+            for _, row in df.iterrows():
+                agents = row['agents']
+                if agent_type in agents:
+                    # Get accumulated rewards
+                    accu_rewards = agents[agent_type].accu_rewards_avl
+                    # Get AVL price
+                    avl_price = agents[agent_type].assets['AVL'].price
+                    # Calculate USD value
+                    rewards_usd.append(accu_rewards * avl_price)
+                else:
+                    rewards_usd.append(0)
+            
+            # Plot this agent's rewards USD value for this scenario
+            ax.plot(timesteps, rewards_usd, label=scenario_name)
+        
+        ax.set_title(f"{agent_type.replace('_', ' ').title()} Rewards (USD)")
+        ax.set_xlabel("Day")
+        if i == 0:
+            ax.set_ylabel("USD Value of Rewards")
+        ax.grid(True)
+    
+    # Add a legend to the rightmost subplot in each row
+    axes[0, -1].legend(loc='upper left', bbox_to_anchor=(1.05, 1))
+    
     plt.tight_layout()
-    plt.show()
+    #plt.show()
+    
+    return fig
 
 
 def plot_comparison_dashboard(scenarios: Dict[str, pd.DataFrame], figsize=(16, 16)):
@@ -514,4 +548,214 @@ def plot_asset_staking_ratio_comparison(scenarios: Dict[str, pd.DataFrame], asse
     plt.tight_layout()
     plt.show()
     
-    return plt.gcf() 
+    return plt.gcf()
+
+
+def plot_staked_token_balances_comparison(scenarios: Dict[str, pd.DataFrame], assets: List[str] = None, figsize=(18, 10)):
+    """
+    Plot staked token balances comparison across scenarios with separate subplot for each asset.
+    
+    Args:
+        scenarios: Dictionary mapping scenario names to DataFrames
+        assets: Optional list of specific assets to compare. If None, all assets will be plotted.
+        figsize: Figure size for the plot
+    
+    Returns:
+        Matplotlib figure object
+    """
+    # Check if staked_token_balances exists in the data
+    first_df = next(iter(scenarios.values()))
+    if 'staked_token_balances' not in first_df.columns:
+        print("Error: 'staked_token_balances' not found in the data.")
+        print("This feature requires running a simulation with the updated model that tracks token balances.")
+        print("Please update your simulation code and run it again, or use other visualization functions.")
+        return None
+    
+    # Find the first non-empty entry
+    first_entry = {}
+    for _, row in first_df.iterrows():
+        if 'staked_token_balances' in row and row['staked_token_balances']:
+            first_entry = row['staked_token_balances']
+            break
+    
+    # If we couldn't find any valid data, show an error
+    if not first_entry:
+        print("Error: No valid 'staked_token_balances' data found.")
+        return None
+        
+    all_assets = list(first_entry.keys())
+    
+    # If assets are specified, use those; otherwise use all assets
+    assets_to_plot = assets if assets else all_assets
+    
+    # Filter out any requested assets that don't exist in the data
+    assets_to_plot = [asset for asset in assets_to_plot if asset in all_assets]
+    
+    if not assets_to_plot:
+        print(f"Error: None of the requested assets {assets} exist in the data.")
+        print(f"Available assets: {all_assets}")
+        return None
+    
+    # Create a figure with a subplot for each asset
+    fig, axes = plt.subplots(len(assets_to_plot), 1, figsize=figsize, sharex=True)
+    
+    # Handle single asset case
+    if len(assets_to_plot) == 1:
+        axes = [axes]
+    
+    # Plot each asset in its own subplot
+    for i, asset_name in enumerate(assets_to_plot):
+        ax = axes[i]
+        
+        for scenario_name, df in scenarios.items():
+            timesteps = df['timestep'].tolist()
+            
+            # Extract staked token balances for this asset
+            balances = []
+            for _, row in df.iterrows():
+                token_balances = row.get('staked_token_balances', {})
+                if token_balances and asset_name in token_balances:
+                    balances.append(token_balances[asset_name])
+                else:
+                    balances.append(0)
+            
+            # Plot this asset's balances for this scenario
+            ax.plot(timesteps, balances, label=scenario_name)
+        
+        # Set titles and labels
+        ax.set_title(f'{asset_name} Staked Token Balance')
+        if i == len(assets_to_plot) - 1:  # Only show x-label on bottom subplot
+            ax.set_xlabel('Day')
+        ax.set_ylabel('Token Amount')
+        ax.legend()
+        ax.grid(True)
+    
+    plt.tight_layout()
+    plt.show()
+    
+    return fig
+
+
+def plot_staked_token_balances_dashboard(scenarios: Dict[str, pd.DataFrame], figsize=(18, 12)):
+    """
+    Create a dashboard view of staked token balances with both the raw balances
+    and percentage of total supply for each asset.
+    
+    Args:
+        scenarios: Dictionary mapping scenario names to DataFrames
+        figsize: Figure size for the plot
+    
+    Returns:
+        Matplotlib figure object
+    """
+    # Check if staked_token_balances exists in the data
+    first_df = next(iter(scenarios.values()))
+    if 'staked_token_balances' not in first_df.columns:
+        print("Error: 'staked_token_balances' not found in the data.")
+        print("This feature requires running a simulation with the updated model that tracks token balances.")
+        print("Please update your simulation code and run it again, or use other visualization functions.")
+        return None
+    
+    # Find the first non-empty entry
+    first_entry = {}
+    for _, row in first_df.iterrows():
+        if 'staked_token_balances' in row and row['staked_token_balances']:
+            first_entry = row['staked_token_balances']
+            break
+    
+    # If we couldn't find any valid data, show an error
+    if not first_entry:
+        print("Error: No valid 'staked_token_balances' data found.")
+        return None
+        
+    all_assets = list(first_entry.keys())
+    
+    if not all_assets:
+        print("Error: No assets found in the staked_token_balances data.")
+        return None
+    
+    # Create a figure with 2 columns (raw balances and % of total)
+    fig, axes = plt.subplots(len(all_assets), 2, figsize=figsize, sharex='col')
+    
+    # Handle single asset case
+    if len(all_assets) == 1:
+        axes = axes.reshape(1, 2)
+    
+    # Get total supply for AVL from constants - assume it's the same across scenarios
+    total_avl_supply = 10_000_000_000  # Default fallback
+    
+    # Try to get the actual total supply from the first scenario
+    if 'constants' in first_df.columns:
+        for _, row in first_df.iterrows():
+            if isinstance(row.get('constants'), dict) and 'total_supply' in row['constants']:
+                total_avl_supply = row['constants']['total_supply']
+                break
+    
+    # Plot each asset in its own row
+    for i, asset_name in enumerate(all_assets):
+        # Raw balances subplot (left column)
+        ax1 = axes[i, 0]
+        
+        for scenario_name, df in scenarios.items():
+            timesteps = df['timestep'].tolist()
+            
+            # Extract staked token balances for this asset
+            balances = []
+            for _, row in df.iterrows():
+                token_balances = row.get('staked_token_balances', {})
+                if token_balances and asset_name in token_balances:
+                    balances.append(token_balances[asset_name])
+                else:
+                    balances.append(0)
+            
+            # Plot this asset's balances for this scenario
+            ax1.plot(timesteps, balances, label=scenario_name)
+        
+        # Set titles and labels for raw balances
+        ax1.set_title(f'{asset_name} Staked Token Balance')
+        if i == len(all_assets) - 1:  # Only show x-label on bottom row
+            ax1.set_xlabel('Day')
+        ax1.set_ylabel('Token Amount')
+        ax1.legend()
+        ax1.grid(True)
+        
+        # Percentage of total (right column) - only for AVL
+        ax2 = axes[i, 1]
+        
+        for scenario_name, df in scenarios.items():
+            timesteps = df['timestep'].tolist()
+            
+            # Extract staked token balances for this asset and convert to percentage
+            percentages = []
+            for _, row in df.iterrows():
+                token_balances = row.get('staked_token_balances', {})
+                if token_balances and asset_name in token_balances:
+                    # For AVL, calculate as percentage of total supply
+                    if asset_name == 'AVL':
+                        percentages.append(token_balances[asset_name] / total_avl_supply * 100)
+                    else:
+                        # For other assets, just show the raw balance
+                        percentages.append(token_balances[asset_name])
+                else:
+                    percentages.append(0)
+            
+            # Plot this asset's percentages for this scenario
+            ax2.plot(timesteps, percentages, label=scenario_name)
+        
+        # Set titles and labels for percentages
+        if asset_name == 'AVL':
+            ax2.set_title(f'{asset_name} Staked (% of Total Supply)')
+            ax2.set_ylabel('% of Total Supply')
+        else:
+            ax2.set_title(f'{asset_name} Staked Token Balance')
+            ax2.set_ylabel('Token Amount')
+            
+        if i == len(all_assets) - 1:  # Only show x-label on bottom row
+            ax2.set_xlabel('Day')
+        ax2.legend()
+        ax2.grid(True)
+    
+    plt.tight_layout()
+    plt.show()
+    
+    return fig 

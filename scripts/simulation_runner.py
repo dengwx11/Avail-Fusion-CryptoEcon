@@ -546,7 +546,7 @@ def plot_simulation_results(df: pd.DataFrame, metrics: List[str] = None):
     # Default metrics to plot if none provided
     if metrics is None:
         metrics = ['token_price', 'total_security', 'yield_pct', 'staking_ratio',
-                   'asset_tvl', 'pool_rewards_spent']
+                   'asset_tvl', 'pool_rewards_spent', 'staked_token_balances']
     
     # Create plots based on requested metrics
     for metric in metrics:
@@ -577,6 +577,7 @@ def plot_simulation_results(df: pd.DataFrame, metrics: List[str] = None):
 
         elif metric == 'yield_pct':
             # Plot yields
+            print("####### Yields #######")
             fig = visualizations.plot_yield_pct(df)
             pio.show(fig)
         
@@ -593,6 +594,11 @@ def plot_simulation_results(df: pd.DataFrame, metrics: List[str] = None):
         elif metric == 'pool_rewards_spent':
             # Plot pool rewards spent
             fig = visualizations.plot_pool_rewards_spent(df)
+            pio.show(fig)
+
+        elif metric == 'staked_token_balances':
+            # Plot staked token balances
+            fig = visualizations.plot_staked_token_balances(df)
             pio.show(fig)
 
 
