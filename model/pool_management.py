@@ -161,6 +161,7 @@ class PoolManager:
             pool_type: Type of pool (AVL, ETH, BTC)
             current_apy: Current APY for this pool
             current_tvl: Current TVL for the pool
+            token_price: Current token price (required for stock-flow model)
             
         Returns:
             Dict with 'deposit' and 'withdrawal' amounts in USD
@@ -182,6 +183,18 @@ class PoolManager:
         base_deposit = pool_config.get('base_deposit', 0.0)
         max_extra_deposit = pool_config.get('max_extra_deposit', 1e6)
         apy_threshold = pool_config.get('apy_threshold', 0.05)
+
+        # Initialize flow model if needed
+        # if pool_type not in self._flow_models and token_price is not None:
+        #     self.initialize_flow_models({pool_type: token_price})
+        # elif token_price is not None and token_price > 0:
+        #     # Update the flow model with current state
+        #     prev_price = self._prev_token_prices.get(pool_type, token_price)
+        #     self._flow_models[pool_type].update_parameters({
+        #         'token_price': token_price,
+        #         'prev_token_price': prev_price,
+        #         'current_apy': current_apy
+        #     })
         
         # Sigmoid function for deposits
         sigmoid_factor = 1.0 / (1.0 + np.exp(-deposit_k * (current_apy - apy_threshold)))
@@ -305,3 +318,231 @@ class PoolManager:
         return (pool_type in self.pools and 
                 pool_type not in self._deleted_pools and
                 pool_type not in self._paused_deposits) 
+    
+
+# import numpy as np
+# from typing import Dict, Any
+
+
+# class StakingFlowModel:
+#     """
+#     A stock-flow consistent model for staking platform deposit and withdrawal flows.
+    
+#     This model calculates flows based on:
+#     1. Price momentum (price changes over time)
+#     2. Effective APY (accounting for market conditions)
+#     3. Liquidity constraints (TVL-dependent factors)
+#     4. Market sentiment (bullish/bearish bias)
+#     """
+    
+#     def __init__(self, params: Dict[str, Any]):
+#         """
+#         Initialize the StakingFlowModel with parameters.
+        
+#         Args:
+#             params: Dictionary of model parameters including:
+#                 - token_price: Current price of the token
+#                 - prev_token_price: Previous price of the token
+#                 - current_apy: Current effective APY offered
+#                 - price_sensitivity: How sensitive flows are to price changes (0-1)
+#                 - apy_sensitivity: How sensitive flows are to APY changes (0-20)
+#                 - momentum_factor: How much price momentum affects flows (0-3)
+#                 - liquidity_factor: How much TVL affects flow dynamics (0-1)
+#                 - base_inflow_rate: Base daily inflow rate (0-0.05)
+#                 - base_outflow_rate: Base daily outflow rate (0-0.05)
+#                 - market_sentiment: Current market sentiment (-1 to 1)
+#                 - asset_type: Asset type (AVL, ETH, BTC)
+#                 - apy_threshold: APY threshold for attractiveness (0-0.20)
+#         """
+#         # Store parameters
+#         self.params = params.copy()
+        
+#         # Ensure required parameters have defaults
+#         defaults = {
+#             'token_price': 1.0,
+#             'prev_token_price': 1.0,
+#             'current_apy': 0.0,
+#             'price_sensitivity': 0.5,
+#             'apy_sensitivity': 10.0,
+#             'momentum_factor': 1.5,
+#             'liquidity_factor': 0.7,
+#             'base_inflow_rate': 0.01,  # 1% daily inflow
+#             'base_outflow_rate': 0.005, # 0.5% daily outflow
+#             'market_sentiment': 0.0,  # Neutral
+#             'asset_type': 'AVL',
+#             'apy_threshold': 0.05  # 5% APY threshold
+#         }
+        
+#         # Apply defaults for missing parameters
+#         for param, default_value in defaults.items():
+#             if param not in self.params:
+#                 self.params[param] = default_value
+    
+#     def update_parameters(self, new_params: Dict[str, Any]):
+#         """Update model parameters"""
+#         self.params.update(new_params)
+    
+#     def update_market_sentiment(self, sentiment: float):
+#         """Update market sentiment parameter (-1 to 1)"""
+#         self.params['market_sentiment'] = max(-1.0, min(1.0, sentiment))
+    
+#     def calculate_price_momentum(self) -> float:
+#         """
+#         Calculate price momentum based on current and previous prices.
+        
+#         Returns:
+#             Momentum factor (-1 to 1) where:
+#             - Positive values indicate upward price movement
+#             - Negative values indicate downward price movement
+#         """
+#         current_price = self.params['token_price']
+#         prev_price = self.params['prev_token_price']
+        
+#         # Safety check to avoid division by zero
+#         if prev_price <= 0:
+#             return 0.0
+            
+#         # Calculate percentage change
+#         price_change_pct = (current_price - prev_price) / prev_price
+        
+#         # Apply momentum factor to amplify/dampen effect
+#         momentum_factor = self.params['momentum_factor']
+        
+#         # Sigmoid function to keep momentum between -1 and 1
+#         momentum = 2.0 / (1.0 + np.exp(-momentum_factor * price_change_pct)) - 1.0
+        
+#         return momentum
+    
+#     def calculate_effective_apy(self) -> float:
+#         """
+#         Calculate effective APY considering market conditions.
+        
+#         Returns:
+#             Effective APY adjusted for market conditions
+#         """
+#         current_apy = self.params['current_apy']
+#         market_sentiment = self.params['market_sentiment']
+        
+#         # In bullish markets, even lower APYs seem attractive
+#         # In bearish markets, higher APYs are needed to attract stakers
+#         sentiment_adjustment = market_sentiment * 0.05  # ±5% adjustment
+        
+#         # Effective APY adjusted for market sentiment
+#         effective_apy = current_apy + sentiment_adjustment
+        
+#         return max(0.0, effective_apy)
+    
+#     def calculate_liquidity_factor(self, current_tvl: float) -> float:
+#         """
+#         Calculate liquidity factor based on current TVL.
+        
+#         Returns:
+#             Liquidity factor between 0 and 1
+#         """
+#         # Base liquidity factor from parameters
+#         base_liquidity = self.params['liquidity_factor']
+        
+#         # For very small TVL, flows are more volatile
+#         if current_tvl < 1e6:  # Less than $1M
+#             tvl_factor = max(0.5, current_tvl / 1e6)
+#         # For very large TVL, flows are less responsive (harder to move the needle)
+#         elif current_tvl > 1e9:  # More than $1B
+#             tvl_factor = 0.8 ** (current_tvl / 1e9)
+#         else:
+#             tvl_factor = 1.0
+            
+#         return base_liquidity * tvl_factor
+    
+#     def calculate_flows_usd(self, current_tvl: float) -> Dict[str, float]:
+#         """
+#         Calculate deposit and withdrawal flows in USD based on model parameters.
+        
+#         Args:
+#             current_tvl: Current total value locked (in USD)
+            
+#         Returns:
+#             Dictionary with 'deposit' and 'withdrawal' flows in USD
+#         """
+#         # Calculate price momentum
+#         price_momentum = self.calculate_price_momentum()
+        
+#         # Calculate effective APY
+#         effective_apy = self.calculate_effective_apy()
+        
+#         # Calculate liquidity factor
+#         liquidity_factor = self.calculate_liquidity_factor(current_tvl)
+        
+#         # Retrieve parameters
+#         price_sensitivity = self.params['price_sensitivity']
+#         apy_sensitivity = self.params['apy_sensitivity']
+#         base_inflow = self.params['base_inflow_rate']
+#         base_outflow = self.params['base_outflow_rate']
+#         market_sentiment = self.params['market_sentiment']
+#         apy_threshold = self.params['apy_threshold']
+        
+#         # Calculate inflow rate (as percentage of TVL)
+#         # Base inflow + adjustments for price momentum, APY, and market sentiment
+        
+#         # APY component: Is the APY attractive?
+#         apy_component = 0.0
+#         if effective_apy >= apy_threshold:
+#             # APY is above threshold - positive effect on inflows
+#             apy_delta = effective_apy - apy_threshold
+#             apy_component = (1.0 - np.exp(-apy_sensitivity * apy_delta)) * 0.05
+#         else:
+#             # APY is below threshold - reduces inflows
+#             apy_delta = apy_threshold - effective_apy
+#             apy_component = -0.2 * (1.0 - np.exp(-apy_sensitivity * apy_delta)) * base_inflow
+        
+#         # Price momentum component
+#         price_component = price_sensitivity * price_momentum * 0.05
+        
+#         # Market sentiment direct component
+#         sentiment_component = market_sentiment * 0.01
+        
+#         # Final inflow rate calculation
+#         inflow_rate = base_inflow + apy_component + price_component + sentiment_component
+        
+#         # Apply liquidity factor
+#         inflow_rate *= liquidity_factor
+        
+#         # Ensure non-negative inflow
+#         inflow_rate = max(0.0, inflow_rate)
+        
+#         # Calculate outflow rate (as percentage of TVL)
+#         # Base outflow - adjustments for price momentum, APY, and market sentiment
+        
+#         # Price momentum component for outflows (inverse effect)
+#         price_outflow_component = -0.5 * price_sensitivity * price_momentum * 0.05
+        
+#         # APY component for outflows (inverse effect)
+#         apy_outflow_component = 0.0
+#         if effective_apy >= apy_threshold:
+#             # Higher APY reduces outflows
+#             apy_delta = effective_apy - apy_threshold
+#             apy_outflow_component = -0.7 * (1.0 - np.exp(-apy_sensitivity * apy_delta)) * 0.05
+#         else:
+#             # Lower APY increases outflows
+#             apy_delta = apy_threshold - effective_apy
+#             apy_outflow_component = 0.5 * (1.0 - np.exp(-apy_sensitivity * apy_delta)) * base_outflow
+        
+#         # Market sentiment component for outflows (inverse effect)
+#         sentiment_outflow_component = -0.5 * market_sentiment * 0.01
+        
+#         # Final outflow rate calculation
+#         outflow_rate = base_outflow + apy_outflow_component + price_outflow_component + sentiment_outflow_component
+        
+#         # Apply liquidity factor
+#         outflow_rate *= liquidity_factor
+        
+#         # Ensure non-negative outflow
+#         outflow_rate = max(0.0, outflow_rate)
+        
+#         # Convert rates to absolute USD flows
+#         deposit_flow = inflow_rate * current_tvl
+#         withdrawal_flow = outflow_rate * current_tvl
+        
+#         return {
+#             'deposit': deposit_flow,
+#             'withdrawal': withdrawal_flow
+#         } 

@@ -44,15 +44,7 @@ psub = [
     #             "AVL_stake": basic_model.update_AVL_stake,
     #         }
     # },
-    {
-        "policies": { # calculate yields for each agent
-            "action": yield_apy.policy_calc_yields
-            },
-            "variables": {
-                "yield_pcts": utils.generic_state_updater("yield_pcts"),
-                "avg_yield": utils.generic_state_updater("avg_yield"),
-            }
-    },
+    
     {
         "policies": { # update inflation and rewards allocation for next timestep
             "action":basic_model.policy_update_inflation_and_rewards
@@ -81,6 +73,15 @@ psub = [
             "pool_manager": utils.generic_state_updater("pool_manager"),
             "agents": utils.generic_state_updater("agents"),
         }
+    },
+    {
+        "policies": { # calculate yields for each agent
+            "action": yield_apy.policy_calc_yields
+            },
+            "variables": {
+                "yield_pcts": utils.generic_state_updater("yield_pcts"),
+                "avg_yield": utils.generic_state_updater("avg_yield"),
+            }
     },
     {
         "policies": {

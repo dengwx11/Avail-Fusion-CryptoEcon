@@ -9,7 +9,8 @@ def create_maxi_agents(
     eth_price: float = 3000,
     avl_price: float = 0.1,
     btc_price: float = 30000,
-    restake_pcts: Dict[str, float] = None
+    restake_pcts: Dict[str, float] = None,
+    avl_lock_preferences: Dict[str, int] = None
 ) -> Dict[str, AgentStake]:
     """Create named agents with 100% allocation to one asset and restaking config"""
     # Default restake percentages if not provided
@@ -20,22 +21,45 @@ def create_maxi_agents(
             'btc_maxi': 1   # 20% restake for BTC maxis
         }
     
+    # Default lock preferences if not provided
+    if avl_lock_preferences is None:
+        avl_lock_preferences = {
+            'avl_maxi': 180,  # AVL maxis prefer 180-day locks for maximum boost
+            'eth_maxi': 0,    # ETH maxis don't lock AVL
+            'btc_maxi': 0     # BTC maxis don't lock AVL
+        }
+    
     return {
-        'avl_maxi': AgentStake(assets={
-            'AVL': AssetAllocation(pct=1.0, balance=avl_balance, price=avl_price),
-            'ETH': AssetAllocation(pct=0.0, balance=0, price=eth_price),
-            'BTC': AssetAllocation(pct=0.0, balance=0, price=btc_price)
-        }, restake_pct=restake_pcts.get('avl_maxi', 1)),
-        'eth_maxi': AgentStake(assets={
-            'AVL': AssetAllocation(pct=0.0, balance=0, price=avl_price),
-            'ETH': AssetAllocation(pct=1.0, balance=eth_balance, price=eth_price),
-            'BTC': AssetAllocation(pct=0.0, balance=0, price=btc_price)
-        }, restake_pct=restake_pcts.get('eth_maxi', 1)),
-        'btc_maxi': AgentStake(assets={
-            'AVL': AssetAllocation(pct=0.0, balance=0, price=avl_price),
-            'ETH': AssetAllocation(pct=0.0, balance=0, price=eth_price),
-            'BTC': AssetAllocation(pct=1.0, balance=btc_balance, price=btc_price)
-        }, restake_pct=restake_pcts.get('btc_maxi', 1))
+        'avl_maxi': AgentStake(
+            id='avl_maxi',
+            assets={
+                'AVL': AssetAllocation(pct=1.0, balance=avl_balance, price=avl_price),
+                'ETH': AssetAllocation(pct=0.0, balance=0, price=eth_price),
+                'BTC': AssetAllocation(pct=0.0, balance=0, price=btc_price)
+            }, 
+            restake_pct=restake_pcts.get('avl_maxi', 1),
+            avl_lock_preference=avl_lock_preferences.get('avl_maxi', 180)
+        ),
+        'eth_maxi': AgentStake(
+            id='eth_maxi',
+            assets={
+                'AVL': AssetAllocation(pct=0.0, balance=0, price=avl_price),
+                'ETH': AssetAllocation(pct=1.0, balance=eth_balance, price=eth_price),
+                'BTC': AssetAllocation(pct=0.0, balance=0, price=btc_price)
+            }, 
+            restake_pct=restake_pcts.get('eth_maxi', 1),
+            avl_lock_preference=avl_lock_preferences.get('eth_maxi', 0)
+        ),
+        'btc_maxi': AgentStake(
+            id='btc_maxi',
+            assets={
+                'AVL': AssetAllocation(pct=0.0, balance=0, price=avl_price),
+                'ETH': AssetAllocation(pct=0.0, balance=0, price=eth_price),
+                'BTC': AssetAllocation(pct=1.0, balance=btc_balance, price=btc_price)
+            }, 
+            restake_pct=restake_pcts.get('btc_maxi', 1),
+            avl_lock_preference=avl_lock_preferences.get('btc_maxi', 0)
+        )
     }
 
 def calculate_agent_composition(agents: List[AgentStake]) -> Dict[str, float]:
@@ -103,15 +127,25 @@ def initialize_state(init_total_fdv, constants, rewards_result, params, restakin
     })
     restake_config = restake_config[0] if isinstance(restake_config, list) else restake_config
     
-    # Create initial agents with restaking config
+    # Get AVL lock preferences from parameters
+    avl_lock_preferences = params.get('avl_lock_preferences', {
+        'avl_maxi': 180,  # AVL maxis prefer 180-day locks for maximum boost
+        'eth_maxi': 0,    # ETH maxis don't lock AVL
+        'btc_maxi': 0     # BTC maxis don't lock AVL
+    })
+    if isinstance(avl_lock_preferences, list):
+        avl_lock_preferences = avl_lock_preferences[0]
+    
+    # Create initial agents with restaking config and lock preferences
     agents = create_maxi_agents(
         eth_balance=300,  # Start with some ETH (~$900,000 at $3000)
         avl_balance=9e6,  # Start with some AVL (~$900,000 at $0.1)
-        btc_balance=0,    # No BTC initially
+        btc_balance=0.1,    # Add some initial BTC (~$300,000 at $30,000) - changed from 0
         eth_price=3000,
         avl_price=0.1,
         btc_price=30000,
-        restake_pcts=restake_config
+        restake_pcts=restake_config,
+        avl_lock_preferences=avl_lock_preferences
     )
     
     # Initialize pool manager
@@ -149,7 +183,7 @@ def initialize_state(init_total_fdv, constants, rewards_result, params, restakin
     
     # Allocate initial budget - direct allocation instead of percentages
     initial_allocations = {
-        'AVL': 21e9,  # 70% of 30M
+        'AVL': 30e10,  # 70% of 30M
         'ETH': 9e9,   # 30% of 30M
         # BTC removed - will be allocated on activation day
     }

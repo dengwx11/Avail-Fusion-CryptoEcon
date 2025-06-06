@@ -32,6 +32,24 @@ class FusionParams:
         {1: {"AVL": 0.15, "ETH": 0.035, "BTC": 0}, 
          180: {"AVL": 0.15, "ETH": 0.035, "BTC": 0.05}}  # BTC target yield
     ])
+    
+    ### AVL Boosting Configuration ###
+    # Lock period multipliers: {lock_days: multiplier}
+    avl_lock_period_multipliers: List[Dict] = default([
+        {0: 1.0, 30: 1.05, 60: 1.1, 180: 1.5}
+    ])
+    
+    # Pool share multipliers: {share_percentage: multiplier}
+    # Share percentage is calculated as (user_avl_balance / total_avl_pool_balance) * 100
+    avl_pool_share_multipliers: List[Dict] = default([
+        {0.01: 1.1, 
+         #0.1: 2.5
+        }  # 1% share gets 1.1x, 10% share gets 2.5x
+    ])
+    
+    # Enable/disable AVL boosting mechanism
+    avl_boosting_enabled: List[bool] = default([True])
+    
     # Security budget replenishment schedule
     # Dictionary mapping timestep to pool-specific token allocations
     security_budget_replenishment: List[Dict] = default([
@@ -41,7 +59,7 @@ class FusionParams:
             # 90: {'AVL': 3e6, 'ETH': 2e6},
             # 120: {'AVL': 3e6, 'ETH': 2e6},
             # 150: {'AVL': 3e6, 'ETH': 2e6},
-            180: {'AVL': 0, 'ETH': 0, 'BTC': 3e9}
+            180: {'AVL': 0, 'ETH': 0, 'BTC': 3e10}
         }
     ])
     # Admin actions to pause deposits or delete pools
@@ -141,3 +159,4 @@ class FusionParams:
         self.native_staking_ratio = [constant["native_staking_ratio"] for constant in self.constants]
 
         self.target_yields[0][self.btc_activation_day[0]] = {"AVL": 0.15, "ETH": 0.035, "BTC": 0.05}
+

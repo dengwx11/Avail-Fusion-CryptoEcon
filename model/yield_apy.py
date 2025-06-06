@@ -45,6 +45,8 @@ def policy_handle_rewards_restaking(params, step, h, s):
     - compounding_yield_pcts: Yield percentages accounting for compounding effects
     - compounding_avg_yield: Average compounding yield across all agents
     
+    For AVL agents with lock preferences, restaked rewards are automatically locked.
+    
     Args:
         params: Simulation parameters
         step: Current step function
@@ -66,8 +68,8 @@ def policy_handle_rewards_restaking(params, step, h, s):
     
     # Process each agent for restaking
     for agent_name, agent in agents.items():
-        # Restake the appropriate portion of current rewards
-        amount_restaked = agent.restake_accumulated_rewards()
+        # Restake the appropriate portion of current rewards (pass timestep for locking)
+        amount_restaked = agent.restake_accumulated_rewards(current_timestep=timestep)
         total_restaked += amount_restaked
         
         # Track accumulated rewards for reporting
@@ -93,7 +95,10 @@ def policy_handle_rewards_restaking(params, step, h, s):
         
         if amount_restaked > 0:
             avl_price = agent.assets['AVL'].price
-            print(f"[RESTAKE] Agent {agent_name} restaked {amount_restaked:.2f} AVL tokens (${amount_restaked * avl_price:.2f})")
+            lock_info = ""
+            if hasattr(agent, 'avl_lock_preference') and agent.avl_lock_preference > 0:
+                lock_info = f" (locked for {agent.avl_lock_preference} days)"
+            print(f"[RESTAKE] Agent {agent_name} restaked {amount_restaked:.2f} AVL tokens (${amount_restaked * avl_price:.2f}){lock_info}")
     
     # Calculate average compounding yield
     total_security_minus_rewards = max(s['total_security'] - total_compounding_rewards_usd, 1)

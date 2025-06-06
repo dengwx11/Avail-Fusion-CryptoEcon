@@ -451,46 +451,155 @@ def plot_staking_ratio_inflation_rate(df, assets=['AVL', 'ETH', 'BTC']):
 
 
 def plot_total_security(df):
+    """
+    Creates a beautiful and informative plot of Total Security (TVL) over time.
+    
+    Args:
+        df: DataFrame containing simulation results with 'total_security' and 'timestep' columns
+        
+    Returns:
+        Plotly figure object with enhanced visualization
+    """
+    # Create figure with secondary y-axis
     fig = go.Figure()
 
-    # Total Security
+    # Add main TVL trace with enhanced styling
     fig.add_trace(
         go.Scatter(
             x=df["timestep"],
             y=df["total_security"],
-            name="Total Security",
-            line=dict(color='#2ca02c', dash='solid'),  # Green color
-            mode='lines'
+            name="Total Security (TVL)",
+            line=dict(
+                color='#2ca02c',  # Green color
+                width=3,
+                shape='spline'  # Smooth line
+            ),
+            mode='lines',
+            hovertemplate="Day: %{x}<br>TVL: $%{y:,.2f}<extra></extra>"
         )
     )
 
+    # Add a moving average line for trend visualization
+    window_size = 7  # 7-day moving average
+    moving_avg = df["total_security"].rolling(window=window_size).mean()
+    fig.add_trace(
+        go.Scatter(
+            x=df["timestep"],
+            y=moving_avg,
+            name=f"{window_size}-Day Moving Average",
+            line=dict(
+                color='#1f77b4',  # Blue color
+                width=2,
+                dash='dot'
+            ),
+            mode='lines',
+            hovertemplate="Day: %{x}<br>Moving Avg: $%{y:,.2f}<extra></extra>"
+        )
+    )
+
+    # Calculate and add key statistics as annotations
+    final_tvl = df["total_security"].iloc[-1]
+    max_tvl = df["total_security"].max()
+    min_tvl = df["total_security"].min()
+    avg_tvl = df["total_security"].mean()
+    
+    # Add annotations for key statistics
+    annotations = [
+        dict(
+            x=0.02,
+            y=0.95,
+            xref="paper",
+            yref="paper",
+            text=f"Final TVL: ${final_tvl:,.2f}",
+            showarrow=False,
+            font=dict(size=12, color="#2ca02c"),
+            bgcolor="rgba(255, 255, 255, 0.8)",
+            bordercolor="#2ca02c",
+            borderwidth=1,
+            borderpad=4
+        ),
+        dict(
+            x=0.02,
+            y=0.88,
+            xref="paper",
+            yref="paper",
+            text=f"Max TVL: ${max_tvl:,.2f}",
+            showarrow=False,
+            font=dict(size=12, color="#2ca02c"),
+            bgcolor="rgba(255, 255, 255, 0.8)",
+            bordercolor="#2ca02c",
+            borderwidth=1,
+            borderpad=4
+        ),
+        dict(
+            x=0.02,
+            y=0.81,
+            xref="paper",
+            yref="paper",
+            text=f"Avg TVL: ${avg_tvl:,.2f}",
+            showarrow=False,
+            font=dict(size=12, color="#2ca02c"),
+            bgcolor="rgba(255, 255, 255, 0.8)",
+            bordercolor="#2ca02c",
+            borderwidth=1,
+            borderpad=4
+        )
+    ]
+
+    # Update layout with enhanced styling
     fig.update_layout(
         title={
-            'text': "Total Security Over Time",
-            'y':0.9,
-            'x':0.5,
+            'text': "Total Value Locked (TVL) Over Time",
+            'y': 0.95,
+            'x': 0.5,
             'xanchor': 'center',
-            'yanchor': 'top'
+            'yanchor': 'top',
+            'font': dict(size=24, color='#2c3e50')
         },
-        xaxis_title="Timestep",
-        yaxis_title="Total Security (USD)",
+        xaxis=dict(
+            title="Day",
+            title_font=dict(size=16, color='#2c3e50'),
+            tickfont=dict(size=12, color='#2c3e50'),
+            gridcolor='rgba(128, 128, 128, 0.2)',
+            zerolinecolor='rgba(128, 128, 128, 0.2)',
+            showgrid=True
+        ),
+        yaxis=dict(
+            title="Total Value Locked (USD)",
+            title_font=dict(size=16, color='#2c3e50'),
+            tickfont=dict(size=12, color='#2c3e50'),
+            gridcolor='rgba(128, 128, 128, 0.2)',
+            zerolinecolor='rgba(128, 128, 128, 0.2)',
+            showgrid=True,
+            tickformat="$,.0f"
+        ),
         legend=dict(
             orientation="h",
             yanchor="bottom",
-            y=-0.3,
+            y=-0.2,
             xanchor="center",
-            x=0.5
+            x=0.5,
+            font=dict(size=12, color='#2c3e50'),
+            bgcolor="rgba(255, 255, 255, 0.8)",
+            bordercolor="#2c3e50",
+            borderwidth=1
         ),
         hovermode="x unified",
         template="plotly_white",
         font=dict(
             family="Arial",
-            size=18,
-            color="black"
+            size=14,
+            color="#2c3e50"
         ),
         plot_bgcolor='rgba(255, 255, 255, 1)',
-        paper_bgcolor='rgba(255, 255, 255, 1)'
+        paper_bgcolor='rgba(255, 255, 255, 1)',
+        margin=dict(t=100, b=100),
+        annotations=annotations,
+        showlegend=True
     )
+
+    # Add range slider for better navigation
+    fig.update_xaxes(rangeslider_visible=True)
 
     return fig
 

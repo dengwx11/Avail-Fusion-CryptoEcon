@@ -630,8 +630,8 @@ def plot_staked_token_balances_comparison(scenarios: Dict[str, pd.DataFrame], as
         ax.legend()
         ax.grid(True)
     
-    plt.tight_layout()
-    plt.show()
+    #plt.tight_layout()
+    #plt.show()
     
     return fig
 

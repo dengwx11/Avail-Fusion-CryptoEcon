@@ -29,7 +29,7 @@ def policy_update_token_prices(params, step, h, s):
             price_kwargs = {f"{asset.lower()}_price": new_price}
             AgentStake.update_agent_prices(agents, **price_kwargs)
         print("[DEBUG] update_token_prices")
-        print(agents)
+        #print(agents)
     return ({"agents": agents})
 
 
@@ -41,12 +41,15 @@ def policy_update_token_prices(params, step, h, s):
 
 def policy_tune_rewards_allocation(params, step, h, s):
     """
-    Adjust rewards allocation using unified pool manager and target yields.
-    Allows admin to replenish the security budget periodically.
+    Calculate and allocate rewards to agents based on their staked assets and boosting multipliers.
+    
+    For AVL staking, applies boosting multipliers based on:
+    1. Lock period (longer locks get higher multipliers)
+    2. Pool share (larger stakes get higher multipliers)
     """
     timestep = s["timestep"]
-    agents = s["agents"].copy()
-    pool_manager = s.get("pool_manager")
+    agents = s['agents'].copy()
+    pool_manager = s.get('pool_manager')
     btc_activation = params.get('btc_activation_day', 180)
     
     # Get target yields from parameters or previous state
@@ -84,15 +87,36 @@ def policy_tune_rewards_allocation(params, step, h, s):
         
         print(f"{'$'*80}\n")
     
-    # Calculate rewards based on asset-specific yields
-    timesteps_per_year = 365 / DELTA_TIME
+    # Get boosting parameters
+    avl_boosting_enabled = params.get('avl_boosting_enabled', True)
+    lock_multipliers = params.get('avl_lock_period_multipliers', {})
+    share_multipliers = params.get('avl_pool_share_multipliers', {})
+    
+    # Process unlocks for all agents at the start of each timestep
+    for agent in agents.values():
+        unlocked_amount = agent.process_avl_unlocks(timestep)
+        if unlocked_amount > 0:
+            print(f"  {agent.id}: Unlocked {unlocked_amount:.2f} AVL tokens")
+    
+    # Get current AVL price for calculations
     avl_price = agents['avl_maxi'].assets['AVL'].price
     
-    # Debug log
-    print(f"\n[REWARDS] Day {timestep} - Asset-specific Yield Calculations:")
+    # Calculate total AVL pool balance for share calculations
+    total_avl_pool_balance = sum(
+        agent.assets['AVL'].balance for agent in agents.values() 
+        if 'AVL' in agent.assets
+    )
     
-    # Rewards calculation for each pool type
+    print(f"\n💰 REWARDS ALLOCATION - DAY {timestep}")
+    print(f"{'='*60}")
+    print(f"AVL Price: ${avl_price:.4f}")
+    print(f"Total AVL Pool Balance: {total_avl_pool_balance:,.2f} AVL")
+    print(f"AVL Boosting Enabled: {avl_boosting_enabled}")
+    
+    # Dictionary to store required rewards for each asset type
     required_rewards = {}
+    
+    # Calculate required rewards for each asset type
     for asset_type in ['AVL', 'ETH', 'BTC']:
         # Skip assets not yet activated (BTC before activation day)
         if asset_type == 'BTC' and (timestep < btc_activation or 'BTC' not in pool_manager.pools):
@@ -105,6 +129,8 @@ def policy_tune_rewards_allocation(params, step, h, s):
         yield_pct = target_yields[asset_type]
         annual_rewards_avl = 0.0
         
+        print(f"\n--- {asset_type} Pool ---")
+        
         # For each agent, calculate rewards for this asset type
         for agent_name, agent in agents.items():
             # Only calculate rewards for this asset if agent holds it
@@ -113,14 +139,42 @@ def policy_tune_rewards_allocation(params, step, h, s):
                 asset_price = agent.assets[asset_type].price
                 asset_tvl = asset_balance * asset_price
                 
-                # If agent holds this asset, calculate rewards
-                asset_annual_rewards_usd = asset_tvl * yield_pct
-                asset_annual_rewards_avl = asset_annual_rewards_usd / avl_price
-                annual_rewards_avl += asset_annual_rewards_avl
+                # Calculate base rewards
+                base_annual_rewards_usd = asset_tvl * yield_pct
+                base_annual_rewards_avl = base_annual_rewards_usd / avl_price
                 
-                print(f"  {agent_name}: {asset_type} TVL: ${asset_tvl:,.2f}, "
-                      f"Yield: {yield_pct*100:.2f}%, "
-                      f"Rewards: {asset_annual_rewards_avl:,.2f} AVL/year")
+                # Apply boosting for AVL assets
+                if asset_type == 'AVL' and avl_boosting_enabled:
+                    boost_multiplier = agent.calculate_avl_boost_multiplier(
+                        total_avl_pool_balance, lock_multipliers, share_multipliers
+                    )
+                    
+                    # Get lock distribution for display
+                    lock_distribution = agent.get_avl_lock_distribution()
+                    unlocked_balance = agent.assets['AVL'].unlocked_balance
+                    pool_share_pct = (asset_balance / total_avl_pool_balance * 100) if total_avl_pool_balance > 0 else 0
+                    
+                    print(f"  {agent_name}: TVL: ${asset_tvl:,.2f}")
+                    print(f"    Unlocked: {unlocked_balance:.2f} AVL")
+                    if lock_distribution:
+                        for period, amount in lock_distribution.items():
+                            print(f"    Locked {period}d: {amount:.2f} AVL")
+                    print(f"    Pool Share: {pool_share_pct:.3f}%")
+                    print(f"    Boost Multiplier: {boost_multiplier:.3f}x")
+                    
+                    # Apply boost to rewards
+                    boosted_annual_rewards_avl = base_annual_rewards_avl * boost_multiplier
+                    annual_rewards_avl += boosted_annual_rewards_avl
+                    
+                    print(f"    Base Rewards: {base_annual_rewards_avl:,.2f} AVL/year")
+                    print(f"    Boosted Rewards: {boosted_annual_rewards_avl:,.2f} AVL/year")
+                else:
+                    # No boosting for non-AVL assets or when boosting is disabled
+                    annual_rewards_avl += base_annual_rewards_avl
+                    
+                    print(f"  {agent_name}: {asset_type} TVL: ${asset_tvl:,.2f}, "
+                          f"Yield: {yield_pct*100:.2f}%, "
+                          f"Rewards: {base_annual_rewards_avl:,.2f} AVL/year")
         
         # Store the total required rewards for this asset type
         required_rewards[asset_type] = annual_rewards_avl
@@ -128,39 +182,62 @@ def policy_tune_rewards_allocation(params, step, h, s):
     # Allocate rewards to each agent with pool manager constraints
     agent_rewards = {agent_name: 0.0 for agent_name in agents.keys()}
     
-    for asset_type, total_asset_rewards in required_rewards.items():
-        # Get daily rewards with budget constraints
-        daily_amount = total_asset_rewards / timesteps_per_year
-        actual_daily_rewards = pool_manager.get_pool_rewards(asset_type, daily_amount)
-        actual_annual_rewards = actual_daily_rewards * timesteps_per_year
-        
-        # If no rewards, skip distribution
-        if actual_annual_rewards <= 0:
+    for asset_type, total_required in required_rewards.items():
+        if total_required <= 0:
             continue
+            
+        # Get actual rewards from pool manager (may be capped by budget)
+        actual_rewards = pool_manager.get_pool_rewards(asset_type, total_required)
         
-        # Calculate what proportion of rewards each agent should get
-        total_asset_tvl = sum(
-            agent.assets[asset_type].tvl for agent in agents.values()
-            if asset_type in agent.assets and agent.assets[asset_type].balance > 0
-        )
+        # Calculate scaling factor if rewards were capped
+        scaling_factor = actual_rewards / total_required if total_required > 0 else 0
         
-        if total_asset_tvl <= 0:
-            continue
+        # Check for excessive unused budget (potential issue indicator)
+        remaining_budget = pool_manager._allocated_budgets.get(asset_type, 0)
+        if remaining_budget > total_required * 10:  # More than 10x required budget
+            print(f"⚠️  WARNING: {asset_type} pool has excessive unused budget: {remaining_budget:,.0f} AVL")
+            print(f"   Required: {total_required:,.0f} AVL, Ratio: {remaining_budget/total_required:.1f}x")
         
-        # Distribute rewards proportionally to each agent based on their holdings
+        if scaling_factor < 1.0:
+            print(f"\n⚠️  {asset_type} pool budget constraint: {scaling_factor:.1%} of requested rewards allocated")
+            
+            # Mark pool as having zero yield due to budget depletion
+            if scaling_factor <= 0.01:  # Less than 1% of requested rewards
+                pool_manager._zero_yield_pools.add(asset_type)
+                print(f"🚨 {asset_type} pool marked as budget-depleted (zero yield)")
+        
+        # Distribute actual rewards proportionally to agents
         for agent_name, agent in agents.items():
             if asset_type in agent.assets and agent.assets[asset_type].balance > 0:
-                agent_asset_tvl = agent.assets[asset_type].tvl
-                agent_share = agent_asset_tvl / total_asset_tvl
-                agent_asset_rewards = actual_annual_rewards * agent_share
-                agent_rewards[agent_name] += agent_asset_rewards
+                asset_balance = agent.assets[asset_type].balance
+                asset_price = agent.assets[asset_type].price
+                asset_tvl = asset_balance * asset_price
+                
+                # Calculate base agent rewards
+                base_agent_rewards_usd = asset_tvl * target_yields[asset_type]
+                base_agent_rewards_avl = base_agent_rewards_usd / avl_price
+                
+                # Apply boosting for AVL
+                if asset_type == 'AVL' and avl_boosting_enabled:
+                    boost_multiplier = agent.calculate_avl_boost_multiplier(
+                        total_avl_pool_balance, lock_multipliers, share_multipliers
+                    )
+                    boosted_agent_rewards_avl = base_agent_rewards_avl * boost_multiplier
+                    final_agent_rewards = boosted_agent_rewards_avl * scaling_factor
+                else:
+                    final_agent_rewards = base_agent_rewards_avl * scaling_factor
+                
+                agent_rewards[agent_name] += final_agent_rewards
     
-    # Finally, apply accumulated rewards to each agent
-    print("\n[REWARDS] Final agent rewards distribution:")
-    for agent_name, rewards_amount in agent_rewards.items():
-        if rewards_amount > 0:
-            agents[agent_name].add_rewards(rewards_amount)
-            print(f"  {agent_name}: {rewards_amount:,.2f} AVL/year")
+    # Apply rewards to agents
+    for agent_name, reward_amount in agent_rewards.items():
+        if reward_amount > 0:
+            agents[agent_name].add_rewards(reward_amount)
+    
+    print(f"\n📊 Final Reward Summary:")
+    for agent_name, reward_amount in agent_rewards.items():
+        if reward_amount > 0:
+            print(f"  {agent_name}: {reward_amount:,.2f} AVL/year")
     
     # Log pool manager state for this timestep
     if pool_manager and timestep % 1 == 0:  # Log every timestep (adjust frequency if needed)
