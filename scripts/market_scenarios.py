@@ -8,7 +8,7 @@ from typing import Dict, List, Optional, Tuple
 
 def generate_price_paths(
     n_periods: int = 365,
-    initial_prices: Dict[str, float] = {'AVL': 1.0, 'ETH': 2000.0, 'BTC': 30000.0},
+    initial_prices: Dict[str, float] = {'AVL': 0.05, 'ETH': 2500.0, 'BTC': 100000.0},
     annual_returns: Dict[str, float] = {'AVL': 0.5, 'ETH': 0.3, 'BTC': 0.2},
     annual_volatilities: Dict[str, float] = {'AVL': 0.7, 'ETH': 0.8, 'BTC': 0.9},
     correlation_matrix: Optional[np.ndarray] = None,
@@ -96,7 +96,7 @@ MARKET_SCENARIOS = {
     'all_bearish_low_vol': {
         'initial_prices': {'AVL': 0.05, 'ETH': 2500, 'BTC': 100000},
         'annual_returns': {'AVL': -0.4, 'ETH': -0.4, 'BTC': -0.4},
-        'annual_volatilities': {'AVL': 0.3, 'ETH': 0.3, 'BTC': 0.3},
+        'annual_volatilities': {'AVL': 0.1, 'ETH': 0.05, 'BTC': 0.005},
         'correlation_matrix': np.array([
             [1.0, 0.9, 0.9],
             [0.9, 1.0, 0.9],
@@ -106,7 +106,7 @@ MARKET_SCENARIOS = {
     'all_bearish_high_vol': {
         'initial_prices': {'AVL': 0.05, 'ETH': 2500, 'BTC': 100000},
         'annual_returns': {'AVL': -0.4, 'ETH': -0.4, 'BTC': -0.4},
-        'annual_volatilities': {'AVL': 0.8, 'ETH': 0.8, 'BTC': 0.8},
+        'annual_volatilities': {'AVL': 0.3, 'ETH': 0.1, 'BTC': 0.05},
         'correlation_matrix': np.array([
             [1.0, 0.9, 0.9],
             [0.9, 1.0, 0.9],
@@ -116,7 +116,7 @@ MARKET_SCENARIOS = {
     'all_neutral_low_vol': {
         'initial_prices': {'AVL': 0.05, 'ETH': 2500, 'BTC': 100000},
         'annual_returns': {'AVL': 0.0, 'ETH': 0.0, 'BTC': 0.0},
-        'annual_volatilities': {'AVL': 0.3, 'ETH': 0.3, 'BTC': 0.3},
+        'annual_volatilities': {'AVL': 0.1, 'ETH': 0.05, 'BTC': 0.005},
         'correlation_matrix': np.array([
             [1.0, 0.9, 0.9],
             [0.9, 1.0, 0.9],
@@ -126,7 +126,7 @@ MARKET_SCENARIOS = {
     'all_neutral_high_vol': {
         'initial_prices': {'AVL': 0.05, 'ETH': 2500, 'BTC': 100000},
         'annual_returns': {'AVL': 0.0, 'ETH': 0.0, 'BTC': 0.0},
-        'annual_volatilities': {'AVL': 0.8, 'ETH': 0.8, 'BTC': 0.8},
+        'annual_volatilities': {'AVL': 0.3, 'ETH': 0.1, 'BTC': 0.05},
         'correlation_matrix': np.array([
             [1.0, 0.9, 0.9],
             [0.9, 1.0, 0.9],
@@ -135,8 +135,8 @@ MARKET_SCENARIOS = {
     },
     'all_bullish_low_vol': {
         'initial_prices': {'AVL': 0.05, 'ETH': 2500, 'BTC': 100000},
-        'annual_returns': {'AVL': 1.0, 'ETH': 1.0, 'BTC': 1.0},
-        'annual_volatilities': {'AVL': 0.3, 'ETH': 0.3, 'BTC': 0.3},
+        'annual_returns': {'AVL': 1.0, 'ETH': 1.0, 'BTC': 0.5},
+        'annual_volatilities': {'AVL': 0.1, 'ETH': 0.05, 'BTC': 0.005},
         'correlation_matrix': np.array([
             [1.0, 0.9, 0.9],
             [0.9, 1.0, 0.9],
@@ -145,8 +145,8 @@ MARKET_SCENARIOS = {
     },
     'all_bullish_high_vol': {
         'initial_prices': {'AVL': 0.05, 'ETH': 2500, 'BTC': 100000},
-        'annual_returns': {'AVL': 1.0, 'ETH': 1.0, 'BTC': 1.0},
-        'annual_volatilities': {'AVL': 0.8, 'ETH': 0.8, 'BTC': 0.8},
+        'annual_returns': {'AVL': 1.0, 'ETH': 1.0, 'BTC': 0.5},
+        'annual_volatilities': {'AVL': 0.3, 'ETH': 0.1, 'BTC': 0.05},
         'correlation_matrix': np.array([
             [1.0, 0.9, 0.9],
             [0.9, 1.0, 0.9],
@@ -157,8 +157,8 @@ MARKET_SCENARIOS = {
     # Alpha Outperformance Scenarios
     'alpha_outperforms_bull': {
         'initial_prices': {'AVL': 0.05, 'ETH': 2500, 'BTC': 100000},
-        'annual_returns': {'AVL': 1.5, 'ETH': 0.5, 'BTC': 0.5},
-        'annual_volatilities': {'AVL': 0.5, 'ETH': 0.5, 'BTC': 0.5},
+        'annual_returns': {'AVL': 1, 'ETH': 0.5, 'BTC': 0.3},
+        'annual_volatilities': {'AVL': 0.2, 'ETH': 0.05, 'BTC': 0.01},
         'correlation_matrix': np.array([
             [1.0, 0.6, 0.6],
             [0.6, 1.0, 0.8],
@@ -168,7 +168,7 @@ MARKET_SCENARIOS = {
     'alpha_outperforms_bear': {
         'initial_prices': {'AVL': 0.05, 'ETH': 2500, 'BTC': 100000},
         'annual_returns': {'AVL': -0.2, 'ETH': -0.5, 'BTC': -0.5},
-        'annual_volatilities': {'AVL': 0.5, 'ETH': 0.5, 'BTC': 0.5},
+        'annual_volatilities': {'AVL': 0.2, 'ETH': 0.05, 'BTC': 0.01},
         'correlation_matrix': np.array([
             [1.0, 0.6, 0.6],
             [0.6, 1.0, 0.8],
@@ -178,7 +178,7 @@ MARKET_SCENARIOS = {
     'alpha_outperforms_high_vol': {
         'initial_prices': {'AVL': 0.05, 'ETH': 2500, 'BTC': 100000},
         'annual_returns': {'AVL': 1.2, 'ETH': 0.5, 'BTC': 0.5},
-        'annual_volatilities': {'AVL': 0.8, 'ETH': 0.5, 'BTC': 0.5},
+        'annual_volatilities': {'AVL': 0.5, 'ETH': 0.05, 'BTC': 0.01},
         'correlation_matrix': np.array([
             [1.0, 0.6, 0.6],
             [0.6, 1.0, 0.8],
@@ -189,8 +189,8 @@ MARKET_SCENARIOS = {
     # Beta Outperformance Scenarios
     'beta_outperforms_bull': {
         'initial_prices': {'AVL': 0.05, 'ETH': 2500, 'BTC': 100000},
-        'annual_returns': {'AVL': 0.5, 'ETH': 1.5, 'BTC': 1.5},
-        'annual_volatilities': {'AVL': 0.5, 'ETH': 0.5, 'BTC': 0.5},
+        'annual_returns': {'AVL': 0.5, 'ETH': 1.5, 'BTC': 0.5},
+        'annual_volatilities': {'AVL': 0.1, 'ETH': 0.05, 'BTC': 0.01},
         'correlation_matrix': np.array([
             [1.0, 0.6, 0.6],
             [0.6, 1.0, 0.8],
@@ -199,8 +199,8 @@ MARKET_SCENARIOS = {
     },
     'beta_outperforms_bear': {
         'initial_prices': {'AVL': 0.05, 'ETH': 2500, 'BTC': 100000},
-        'annual_returns': {'AVL': -0.5, 'ETH': -0.2, 'BTC': -0.2},
-        'annual_volatilities': {'AVL': 0.5, 'ETH': 0.5, 'BTC': 0.5},
+        'annual_returns': {'AVL': -0.8, 'ETH': -0.2, 'BTC': -0.2},
+        'annual_volatilities': {'AVL': 0.1, 'ETH': 0.05, 'BTC': 0.01},
         'correlation_matrix': np.array([
             [1.0, 0.6, 0.6],
             [0.6, 1.0, 0.8],
@@ -209,8 +209,8 @@ MARKET_SCENARIOS = {
     },
     'beta_outperforms_high_vol': {
         'initial_prices': {'AVL': 0.05, 'ETH': 2500, 'BTC': 100000},
-        'annual_returns': {'AVL': 0.5, 'ETH': 1.2, 'BTC': 1.2},
-        'annual_volatilities': {'AVL': 0.5, 'ETH': 0.8, 'BTC': 0.8},
+        'annual_returns': {'AVL': 0.2, 'ETH': 1.2, 'BTC': 0.5},
+        'annual_volatilities': {'AVL': 0.3, 'ETH': 0.1, 'BTC': 0.05},
         'correlation_matrix': np.array([
             [1.0, 0.6, 0.6],
             [0.6, 1.0, 0.8],
@@ -222,7 +222,7 @@ MARKET_SCENARIOS = {
     'uncorrelated_mixed': {
         'initial_prices': {'AVL': 0.05, 'ETH': 2500, 'BTC': 100000},
         'annual_returns': {'AVL': 1.0, 'ETH': 0.5, 'BTC': -0.3},
-        'annual_volatilities': {'AVL': 0.5, 'ETH': 0.5, 'BTC': 0.5},
+        'annual_volatilities': {'AVL': 0.1, 'ETH': 0.05, 'BTC': 0.01},
         'correlation_matrix': np.array([
             [1.0, 0.2, 0.2],
             [0.2, 1.0, 0.2],
@@ -232,7 +232,7 @@ MARKET_SCENARIOS = {
     'Uncorrelated_fully_mixed': {
         'initial_prices': {'AVL': 0.05, 'ETH': 2500, 'BTC': 100000},
         'annual_returns': {'AVL': -0.4, 'ETH': 0.0, 'BTC': 1.0},
-        'annual_volatilities': {'AVL': 0.5, 'ETH': 0.5, 'BTC': 0.5},
+        'annual_volatilities': {'AVL': 0.1, 'ETH': 0.05, 'BTC': 0.01},
         'correlation_matrix': np.array([
             [1.0, 0.2, 0.2],
             [0.2, 1.0, 0.2],
@@ -242,7 +242,7 @@ MARKET_SCENARIOS = {
     'Uncorrelated_divergent_volatilities': {
         'initial_prices': {'AVL': 0.05, 'ETH': 2500, 'BTC': 100000},
         'annual_returns': {'AVL': 0.0, 'ETH': 0.0, 'BTC': 0.0},
-        'annual_volatilities': {'AVL': 0.8, 'ETH': 0.5, 'BTC': 0.3},
+        'annual_volatilities': {'AVL': 0.1, 'ETH': 0.05, 'BTC': 0.01},
         'correlation_matrix': np.array([
             [1.0, 0.2, 0.2],
             [0.2, 1.0, 0.2],
@@ -253,8 +253,8 @@ MARKET_SCENARIOS = {
     # Regime Transition Scenarios
     'bull_to_bear': {
         'initial_prices': {'AVL': 0.05, 'ETH': 2500, 'BTC': 100000},
-        'annual_returns': {'AVL': 0.1, 'ETH': 0.1, 'BTC': 0.1},
-        'annual_volatilities': {'AVL': 0.5, 'ETH': 0.5, 'BTC': 0.5},
+        'annual_returns': {'AVL': 1, 'ETH': 0.5, 'BTC': 0.3},
+        'annual_volatilities': {'AVL': 0.1, 'ETH': 0.05, 'BTC': 0.01},
         'correlation_matrix': np.array([
             [1.0, 0.8, 0.8],
             [0.8, 1.0, 0.8],
@@ -262,14 +262,14 @@ MARKET_SCENARIOS = {
         ]),
         'regime_changes': {
             180: {
-                'returns': {'AVL': -0.1, 'ETH': -0.1, 'BTC': -0.1}
+                'returns': {'AVL': -0.8, 'ETH': -0.5, 'BTC': -0.3}
             }
         }
     },
     'bear_to_bull': {
         'initial_prices': {'AVL': 0.05, 'ETH': 2500, 'BTC': 100000},
-        'annual_returns': {'AVL': -0.1, 'ETH': -0.1, 'BTC': -0.1},
-        'annual_volatilities': {'AVL': 0.5, 'ETH': 0.5, 'BTC': 0.5},
+        'annual_returns': {'AVL': -0.8, 'ETH': -0.5, 'BTC': -0.3},
+        'annual_volatilities': {'AVL': 0.1, 'ETH': 0.05, 'BTC': 0.01},
         'correlation_matrix': np.array([
             [1.0, 0.8, 0.8],
             [0.8, 1.0, 0.8],
@@ -277,7 +277,7 @@ MARKET_SCENARIOS = {
         ]),
         'regime_changes': {
             180: {
-                'returns': {'AVL': 0.1, 'ETH': 0.1, 'BTC': 0.1}
+                'returns': {'AVL': 1, 'ETH': 0.5, 'BTC': 0.3}
             }
         }
     },
